@@ -8,6 +8,10 @@ import type { Card, EnergyType, CardType } from '@/types/card';
 import { ENERGY_COLORS, ENERGY_LABEL, TYPE_LABEL } from '@/utils/energyColors';
 import CardComponent from '@/components/battle/CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
+import { MOD_MAP } from '@/data/mods';
+import { MOD_RARITY_COLOR } from '@/utils/cardMods';
+
+const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
 
 const ENERGIES: (EnergyType | 'all')[] = ['all', 'volt', 'cipher', 'neutral'];
 const TYPES: (CardType | 'all')[] = ['all', 'agent', 'script', 'malware', 'trap'];
@@ -397,7 +401,47 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
               fontSize: 9, color: '#aaaacc', maxWidth: 130, lineHeight: 1.4,
             }}>
               {previewCard.description}
+              {previewCard.keywords?.map((kw) => (
+                <div key={kw.keyword} style={{ color: ENERGY_COLORS[previewCard.energy].primary, marginTop: 3 }}>
+                  [{kw.keyword.toUpperCase()}{kw.value ? ` ${kw.value}` : ''}]
+                </div>
+              ))}
             </div>
+            {/* Mods panel */}
+            {previewCard.mods && previewCard.mods.mods.length > 0 && (
+              <div style={{
+                marginTop: 4, background: 'rgba(5,5,20,0.95)',
+                border: `1px solid ${MOD_RARITY_COLOR[previewCard.mods.modRarity]}`,
+                padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace',
+                maxWidth: 130,
+                boxShadow: `0 0 8px ${MOD_RARITY_COLOR[previewCard.mods.modRarity]}44`,
+              }}>
+                <div style={{ fontSize: 7, color: MOD_RARITY_COLOR[previewCard.mods.modRarity], letterSpacing: '0.15em', marginBottom: 5, textAlign: 'center' }}>
+                  {previewCard.mods.modRarity.toUpperCase()} · {previewCard.mods.mods.length} MOD{previewCard.mods.mods.length > 1 ? 'S' : ''}
+                </div>
+                {previewCard.mods.mods.map((applied, i) => {
+                  const mod = MOD_MAP[applied.modId];
+                  if (!mod) return null;
+                  const tier = applied.tier as 1 | 2 | 3;
+                  const effect = mod.tiers[tier];
+                  return (
+                    <div key={i} style={{ marginBottom: i < previewCard.mods!.mods.length - 1 ? 5 : 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 7, color: TIER_COLOR[tier], fontWeight: 700, background: 'rgba(255,255,255,0.05)', padding: '1px 3px', borderRadius: 2 }}>
+                          T{tier}
+                        </span>
+                        <span style={{ fontSize: 8, color: '#e0e0ff', fontWeight: 700 }}>
+                          {mod.name}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 7, color: '#8888aa', marginTop: 1, marginLeft: 4 }}>
+                        {effect.description}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
