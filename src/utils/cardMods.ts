@@ -150,10 +150,16 @@ function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
   };
 }
 
+// ── Assign a random art index to any card (call when adding to shop/deck) ─────
+
+export function withRandomArt(card: Card): Card {
+  return { ...card, artIndex: Math.floor(Math.random() * 1000) };
+}
+
 // ── Main function: generate a modded copy of a base card ─────────────────────
 
 export function generateModdedCard(baseCard: Card, modCount: number): Card {
-  if (modCount === 0) return baseCard;
+  if (modCount === 0) return { ...baseCard, artIndex: Math.floor(Math.random() * 1000) };
 
   const clampedCount = Math.min(4, Math.max(0, modCount));
   const mods = pickMods(baseCard, clampedCount);
@@ -183,6 +189,7 @@ export function generateModdedCard(baseCard: Card, modCount: number): Card {
     name: generatedName,
     uniqueId,
     mods: cardMods,
+    artIndex: Math.floor(Math.random() * 1000),
   };
 }
 

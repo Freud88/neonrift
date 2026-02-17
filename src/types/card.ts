@@ -51,6 +51,8 @@ export interface Card {
   triggerCondition?: 'on_attack' | 'on_play_agent' | 'on_play_script' | 'on_damage';
   // Mod system (absent on base cards)
   mods?: CardMods;
+  /** Random index into the agent art pool, assigned at generation time */
+  artIndex?: number;
 }
 
 export interface CardInPlay {

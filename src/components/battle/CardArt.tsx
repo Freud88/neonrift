@@ -305,12 +305,10 @@ export default function CardArt({ card, width, height }: { card: Card; width: nu
     fetchAgentArt().then(setAgentArtList);
   }, [isAgent]);
 
-  // Seeded art pick — stable as long as list is the same
-  const modKey = card.mods?.mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_') ?? '';
-  const seed = `${card.id}__${modKey}`;
-  const rng = seededRandom(seed);
+  // Art pick: use artIndex assigned at generation time (random per card instance)
   const pool = agentArtList.length > 0 ? agentArtList : ['/Cards/Art/Agent 1.png'];
-  const agentArtSrc = pool[Math.floor(rng() * pool.length)];
+  const artIdx = card.artIndex ?? 0;
+  const agentArtSrc = pool[artIdx % pool.length];
 
   useEffect(() => {
     if (isAgent) return; // agent uses <img> layers, not canvas
