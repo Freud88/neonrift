@@ -1,12 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { Card, CardInPlay } from '@/types/card';
 import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
 import CardArt from './CardArt';
+
+// Process frame PNG once: remove white pixels, cache as data URL
+let frameSrc: string = '/Cards/Frame Agents.png'; // starts as raw PNG
+let frameReady = false;
+let frameCallbacks: (() => void)[] = [];
+
+function loadProcessedFrame(onReady: () => void) {
+  if (frameReady) { onReady(); return; }
+  frameCallbacks.push(onReady);
+  if (frameCallbacks.length > 1) return; // already loading
+  const img = new window.Image();
+  img.src = '/Cards/Frame Agents.png';
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      if (d.data[i] > 230 && d.data[i+1] > 230 && d.data[i+2] > 230)
+        d.data[i+3] = 0;
+    }
+    ctx.putImageData(d, 0, 0);
+    frameSrc = c.toDataURL('image/png');
+    frameReady = true;
+    frameCallbacks.forEach(cb => cb());
+    frameCallbacks = [];
+  };
+}
 
 const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
 const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
@@ -44,7 +73,12 @@ export default function CardComponent({
   onClick,
 }: CardComponentProps) {
   const [showModTooltip, setShowModTooltip] = useState(false);
+  const [, forceUpdate] = useState(0);
   const ec = ENERGY_COLORS[card.energy];
+
+  useEffect(() => {
+    if (!frameReady) loadProcessedFrame(() => forceUpdate(n => n + 1));
+  }, []);
   const { w, h, fontSize } = SIZE_DIMS[size];
 
   const isAgent = card.type === 'agent';
@@ -75,7 +109,7 @@ export default function CardComponent({
         width: w,
         height: h,
         background: faceDown ? '#0d0d1a' : ec.bg,
-        border: `1.5px solid ${selected || attacking ? '#ffffff' : rarityBorderColor ?? ec.primary}`,
+        border: 'none',
         borderRadius: 4,
         boxShadow: selected
           ? `0 0 14px #fff, 0 0 6px ${rarityBorderColor ?? ec.primary}`
@@ -99,6 +133,22 @@ export default function CardComponent({
       whileTap={disabled ? {} : { scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
+      {/* Card frame overlay — white-processed PNG, sits above bg, below content */}
+      {!faceDown && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={frameSrc}
+          alt=""
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'fill',
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        />
+      )}
+
       {faceDown ? (
         // Back of card
         <div
@@ -106,12 +156,17 @@ export default function CardComponent({
             width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'repeating-linear-gradient(45deg, #0a0a1a 0px, #0a0a1a 4px, #111133 4px, #111133 8px)',
+            position: 'relative', zIndex: 3,
           }}
         >
           <span style={{ color: '#1a1a3a', fontSize: 20 }}>?</span>
         </div>
       ) : (
-        <>
+        <div style={{
+          display: 'flex', flexDirection: 'column', flex: 1,
+          position: 'relative', zIndex: 3,
+          minHeight: 0,
+        }}>
           {/* Top row: cost + type */}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -268,7 +323,7 @@ export default function CardComponent({
               transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
-        </>
+        </div>
       )}
 
       {/* Mod tooltip on hover */}
