@@ -71,7 +71,8 @@ export class MapEngine {
   }
 
   private _loadPlayerSprites() {
-    const sets: { key: keyof typeof this.sprites; paths: string[] }[] = [
+    type SpriteKey = 'idle' | 'walkRight' | 'walkLeft';
+    const sets: { key: SpriteKey; paths: string[] }[] = [
       { key: 'idle',      paths: ['drifter_idle1.png', 'drifter_idle2.png'] },
       { key: 'walkRight', paths: ['drifter_walk_right1.png', 'drifter_walk_right2.png', 'drifter_walk_right3.png', 'drifter_walk_right4.png'] },
       { key: 'walkLeft',  paths: ['drifter_walk_left1.png',  'drifter_walk_left2.png',  'drifter_walk_left3.png',  'drifter_walk_left4.png'] },
