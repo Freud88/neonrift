@@ -198,6 +198,12 @@ export function useExploration(
         player.y = ny;
       }
 
+      // Update velocity + facing for sprite animation
+      player.vx = dx;
+      player.vy = dy;
+      if (dx < -0.1) player.facing = 'left';
+      else if (dx > 0.1) player.facing = 'right';
+
       // ── Enemy AI ─────────────────────────────────────────────────────────
       for (const e of entities) {
         if (e.type !== 'enemy' || e.defeated) continue;

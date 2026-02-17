@@ -25,6 +25,7 @@ export interface SpriteEntity {
   label?: string;
   difficulty?: number;
   isBoss?: boolean;
+  facing?: 'left' | 'right';   // last horizontal direction
   // wandering AI
   wanderTarget?: { x: number; y: number };
   wanderTimer?: number;
@@ -53,8 +54,12 @@ export class MapEngine {
   private frameCount = 0;
   private rainDrops: RainDrop[] = [];
 
-  // Player sprite frames (2-frame idle animation)
-  private playerFrames: HTMLImageElement[] = [];
+  // Player sprite animation sets
+  private sprites: {
+    idle:       HTMLImageElement[];
+    walkRight:  HTMLImageElement[];
+    walkLeft:   HTMLImageElement[];
+  } = { idle: [], walkRight: [], walkLeft: [] };
   private playerSpritesLoaded = false;
 
   constructor(canvas: HTMLCanvasElement, mapData: MapData) {
@@ -66,20 +71,26 @@ export class MapEngine {
   }
 
   private _loadPlayerSprites() {
-    const paths = [
-      '/assets/sprites/drifter/drifter_idle1.png',
-      '/assets/sprites/drifter/drifter_idle2.png',
+    const sets: { key: keyof typeof this.sprites; paths: string[] }[] = [
+      { key: 'idle',      paths: ['drifter_idle1.png', 'drifter_idle2.png'] },
+      { key: 'walkRight', paths: ['drifter_walk_right1.png', 'drifter_walk_right2.png', 'drifter_walk_right3.png', 'drifter_walk_right4.png'] },
+      { key: 'walkLeft',  paths: ['drifter_walk_left1.png',  'drifter_walk_left2.png',  'drifter_walk_left3.png',  'drifter_walk_left4.png'] },
     ];
+    const base = '/assets/sprites/drifter/';
+    const total = sets.reduce((acc, s) => acc + s.paths.length, 0);
     let loaded = 0;
-    this.playerFrames = paths.map((src) => {
-      const img = new Image();
-      img.src = src;
-      img.onload = () => {
-        loaded++;
-        if (loaded === paths.length) this.playerSpritesLoaded = true;
-      };
-      return img;
-    });
+
+    for (const set of sets) {
+      this.sprites[set.key] = set.paths.map((name) => {
+        const img = new Image();
+        img.src = base + name;
+        img.onload = () => {
+          loaded++;
+          if (loaded === total) this.playerSpritesLoaded = true;
+        };
+        return img;
+      });
+    }
   }
 
   private _initRain() {
@@ -323,12 +334,22 @@ export class MapEngine {
     ctx.fill();
 
     if (this.playerSpritesLoaded) {
-      // 2-frame idle: switch every ~30 render frames (~0.5 s at 60 fps)
-      const frameIdx = Math.floor(this.frameCount / 30) % this.playerFrames.length;
-      const img = this.playerFrames[frameIdx];
+      const isMovingH = Math.abs(e.vx) > 0.1;
+      let frames: HTMLImageElement[];
+      let frameDuration: number;
+
+      if (isMovingH) {
+        frames = e.facing === 'left' ? this.sprites.walkLeft : this.sprites.walkRight;
+        frameDuration = 8; // switch frame every 8 render frames (~0.13 s at 60 fps)
+      } else {
+        frames = this.sprites.idle;
+        frameDuration = 30; // slower idle
+      }
+
+      const frameIdx = Math.floor(this.frameCount / frameDuration) % frames.length;
+      const img = frames[frameIdx];
       const spriteW = 32;
       const spriteH = 32;
-      // Draw centered on (sx, sy), pixel-perfect (no smoothing for pixel art)
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, sx - spriteW / 2, sy - spriteH / 2, spriteW, spriteH);
     } else {
