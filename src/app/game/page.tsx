@@ -90,12 +90,13 @@ export default function GamePage() {
       setScreen('battle');
       setScene('battle');
 
-      // Show tutorial on first battle
-      if (gameState && !gameState.progress.tutorialSeen) {
+      // Read fresh state from store (avoids stale closure)
+      const freshState = useGameStore.getState().gameState;
+      if (freshState && !freshState.progress.tutorialSeen) {
         setShowTutorial(true);
       }
     }, 1400);
-  }, [setScene, gameState]);
+  }, [setScene]);
 
   const handleBattleEnd = useCallback((result: 'win' | 'lose') => {
     const profileId = pendingBattle?.profileId ?? '';
@@ -129,6 +130,15 @@ export default function GamePage() {
   const handleTutorialDone = useCallback(() => {
     setShowTutorial(false);
     markTutorialSeen();
+    // Also update localStorage directly as a safety net
+    try {
+      const raw = localStorage.getItem('neonrift_save');
+      if (raw) {
+        const save = JSON.parse(raw);
+        save.progress = { ...save.progress, tutorialSeen: true };
+        localStorage.setItem('neonrift_save', JSON.stringify(save));
+      }
+    } catch { /* ignore */ }
   }, [markTutorialSeen]);
 
   const handleDistrictVictoryContinue = useCallback(() => {
