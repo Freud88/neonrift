@@ -103,8 +103,6 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
           boxShadow: `0 0 40px ${rarityBorderColor ?? ec.primary}, 0 0 80px rgba(0,0,0,0.8)`,
           position: 'relative',
           overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
         }}
       >
         {/* Frame overlay */}
@@ -117,24 +115,45 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
         </div>
 
         {/* Content above frame */}
-        <div style={{ position: 'relative', zIndex: 4, display: 'flex', flexDirection: 'column', flex: 1 }}>
-          {/* Top row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px 0' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 4 }}>
+          {/* Name in frame's top name bar zone (7.2%–14.6% from top) */}
+          <div style={{
+            position: 'absolute',
+            top: `${ph * 0.072}px`, height: `${ph * 0.074}px`,
+            left: `${pw * 0.08}px`, right: `${pw * 0.08}px`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 11, fontWeight: 700,
+              color: ec.primary,
+              textShadow: `0 0 8px ${ec.primary}, 0 0 16px ${ec.glow}`,
+              textAlign: 'center',
+              lineHeight: 1,
+              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+              maxWidth: '100%',
+            }}>
+              {card.name}
+            </span>
+          </div>
+
+          {/* Cost badge top-left */}
+          <div style={{ position: 'absolute', top: 6, left: 8 }}>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 700, color: ec.primary, background: 'rgba(0,0,0,0.6)', borderRadius: 3, padding: '1px 5px' }}>
               {card.cost}
             </span>
+          </div>
+
+          {/* Type badge top-right */}
+          <div style={{ position: 'absolute', top: 6, right: 8 }}>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: ec.primary, opacity: 0.8 }}>
               {TYPE_LABEL[card.type]}
             </span>
           </div>
 
-          <div style={{ flex: 1 }} />
-
           {/* Bottom info */}
-          <div style={{ padding: '0 8px 8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.85))' }}>
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 700, color: '#e0e0ff', textShadow: `0 0 6px ${ec.primary}`, marginBottom: 4 }}>
-              {card.name}
-            </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 8px 8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.85))' }}>
+            <div style={{ height: 0 }} />{/* spacer — name now in frame bar */}
             {isAgent && atk !== undefined && def !== undefined ? (
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#e0e0ff', fontWeight: 700, marginBottom: 4 }}>
                 ⚔{atk} <span style={{ color: '#6666aa' }}>|</span> 🛡{def}
