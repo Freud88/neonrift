@@ -24,6 +24,7 @@ function GlitchTransition({ show }: { show: boolean }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
         >
           {[...Array(6)].map((_, i) => (
             <motion.div
@@ -83,6 +84,8 @@ export default function GamePage() {
   // ── Scene transitions ─────────────────────────────────────────────────────
 
   const handleBattleStart = useCallback((enemyId: string, profileId: string) => {
+    // Guard: ignore if already transitioning to battle
+    if (screen === 'battle') return;
     setPendingBattle({ enemyId, profileId });
     setGlitchShow(true);
     setTimeout(() => {
@@ -95,8 +98,8 @@ export default function GamePage() {
       if (freshState && !freshState.progress.tutorialSeen) {
         setShowTutorial(true);
       }
-    }, 1400);
-  }, [setScene]);
+    }, 700);
+  }, [screen, setScene]);
 
   const handleBattleEnd = useCallback((result: 'win' | 'lose') => {
     const profileId = pendingBattle?.profileId ?? '';
