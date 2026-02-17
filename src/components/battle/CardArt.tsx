@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import type { Card } from '@/types/card';
 import { seededRandom } from '@/utils/seededRandom';
 import { MOD_MAP } from '@/data/mods';
@@ -17,6 +16,38 @@ const ENERGY_BASE: Record<string, [string, string]> = {
 };
 
 const FRAME_SRC = '/Cards/Frame Agents.png';
+
+// Cache the processed (white-removed) frame as an offscreen canvas
+let frameCanvasCache: HTMLCanvasElement | null = null;
+let frameLoadPromise: Promise<HTMLCanvasElement> | null = null;
+
+function loadFrameCanvas(): Promise<HTMLCanvasElement> {
+  if (frameCanvasCache) return Promise.resolve(frameCanvasCache);
+  if (frameLoadPromise) return frameLoadPromise;
+  frameLoadPromise = new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.src = FRAME_SRC;
+    img.onload = () => {
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = img.naturalWidth;
+      offscreen.height = img.naturalHeight;
+      const ctx = offscreen.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      // Remove near-white pixels (threshold 230/255)
+      const data = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+      for (let i = 0; i < data.data.length; i += 4) {
+        const r = data.data[i], g = data.data[i + 1], b = data.data[i + 2];
+        if (r > 230 && g > 230 && b > 230) data.data[i + 3] = 0; // transparent
+      }
+      ctx.putImageData(data, 0, 0);
+      frameCanvasCache = offscreen;
+      resolve(offscreen);
+    };
+    img.onerror = () => resolve(document.createElement('canvas'));
+  });
+  return frameLoadPromise;
+}
 
 // Module-level cache so we only fetch once per session
 let agentArtCache: string[] | null = null;
@@ -310,64 +341,52 @@ export default function CardArt({ card, width, height }: { card: Card; width: nu
   const artIdx = card.artIndex ?? 0;
   const agentArtSrc = pool[artIdx % pool.length];
 
+  // Draw procedural art + frame overlay on canvas
   useEffect(() => {
-    if (isAgent) return; // agent uses <img> layers, not canvas
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    drawProceduralArt(ctx, card, width, height);
-  }, [card, width, height, isAgent]);
 
-  if (isAgent) {
-    // Layered: artwork image + frame overlay with multiply blend
-    return (
-      <div style={{ position: 'relative', width, height, borderRadius: 2, overflow: 'hidden' }}>
-        {/* Agent artwork underneath */}
-        <Image
-          src={agentArtSrc}
-          alt=""
-          fill
-          style={{ objectFit: 'cover', objectPosition: 'center top' }}
-          sizes={`${width}px`}
-          priority={false}
-        />
-        {/* Frame on top — multiply blend erases the white center, keeps dark frame pixels */}
-        <Image
-          src={FRAME_SRC}
-          alt=""
-          fill
-          style={{
-            objectFit: 'fill',
-            mixBlendMode: 'multiply',
-          }}
-          sizes={`${width}px`}
-          priority={false}
-        />
-      </div>
-    );
-  }
+    if (isAgent) {
+      // For agents: draw artwork image then frame on top
+      const artImg = new window.Image();
+      artImg.src = agentArtSrc;
+      const drawFrame = (frameCanvas: HTMLCanvasElement) => {
+        ctx.clearRect(0, 0, width, height);
+        // Draw artwork scaled to fill
+        if (artImg.complete && artImg.naturalWidth > 0) {
+          ctx.drawImage(artImg, 0, 0, width, height);
+        }
+        // Draw processed frame (white removed) scaled to fill
+        if (frameCanvas.width > 0) {
+          ctx.drawImage(frameCanvas, 0, 0, width, height);
+        }
+      };
+      loadFrameCanvas().then((frameCanvas) => {
+        if (artImg.complete) {
+          drawFrame(frameCanvas);
+        } else {
+          artImg.onload = () => drawFrame(frameCanvas);
+        }
+      });
+    } else {
+      // Non-agent: procedural art then frame
+      drawProceduralArt(ctx, card, width, height);
+      loadFrameCanvas().then((frameCanvas) => {
+        if (frameCanvas.width > 0) {
+          ctx.drawImage(frameCanvas, 0, 0, width, height);
+        }
+      });
+    }
+  }, [card, width, height, isAgent, agentArtSrc]);
 
-  // Non-agent: procedural canvas + frame overlay
   return (
-    <div style={{ position: 'relative', width, height, borderRadius: 2, overflow: 'hidden' }}>
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        style={{ display: 'block', borderRadius: 2 }}
-      />
-      <Image
-        src={FRAME_SRC}
-        alt=""
-        fill
-        style={{
-          objectFit: 'fill',
-          mixBlendMode: 'multiply',
-        }}
-        sizes={`${width}px`}
-        priority={false}
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      style={{ display: 'block', borderRadius: 2, pointerEvents: 'none' }}
+    />
   );
 }
