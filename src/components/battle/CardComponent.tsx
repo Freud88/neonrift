@@ -6,6 +6,7 @@ import type { Card, CardInPlay } from '@/types/card';
 import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
+import CardArt from './CardArt';
 
 const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
 const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
@@ -142,67 +143,44 @@ export default function CardComponent({
           {/* Card artwork area */}
           <div style={{
             flex: 1,
-            background: `linear-gradient(135deg, rgba(0,0,0,0.8) 0%, ${ec.bg} 100%)`,
             margin: '3px 4px',
             borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             overflow: 'hidden',
             position: 'relative',
           }}>
-            {/* Energy icon as "artwork" */}
-            <span style={{
-              fontSize: h * 0.22,
-              opacity: 0.5,
-              filter: `drop-shadow(0 0 4px ${ec.primary})`,
-            }}>
-              {ENERGY_ICON[card.energy]}
-            </span>
-            {/* Prefix name */}
-            {prefixName && (
+            {size !== 'mini' ? (
+              <CardArt card={card} width={w - 8} height={Math.round((h - 8) * 0.48)} />
+            ) : (
+              /* Mini size: simple energy icon fallback */
               <div style={{
-                position: 'absolute',
-                top: 2, left: 2, right: 2,
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: fontSize - 1.5,
-                color: rarityBorderColor ?? ec.primary,
-                textAlign: 'center',
-                lineHeight: 1,
-                opacity: 0.9,
+                width: '100%', height: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: `linear-gradient(135deg, rgba(0,0,0,0.8) 0%, ${ec.bg} 100%)`,
               }}>
-                {prefixName}
+                <span style={{ fontSize: h * 0.22, opacity: 0.5 }}>
+                  {ENERGY_ICON[card.energy]}
+                </span>
               </div>
             )}
-            {/* Name */}
+            {/* Card name overlay */}
             <div style={{
               position: 'absolute',
-              bottom: suffixName ? 10 : 2, left: 2, right: 2,
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: fontSize,
-              fontWeight: 700,
-              color: '#e0e0ff',
-              textAlign: 'center',
-              lineHeight: 1.1,
-              textShadow: `0 0 4px ${ec.primary}`,
+              bottom: 0, left: 0, right: 0,
+              background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
+              padding: '6px 3px 2px',
             }}>
-              {displayName.replace(prefixName ? prefixName + ' ' : '', '').replace(suffixName ? ' ' + suffixName : '', '')}
-            </div>
-            {/* Suffix name */}
-            {suffixName && (
               <div style={{
-                position: 'absolute',
-                bottom: 2, left: 2, right: 2,
                 fontFamily: 'JetBrains Mono, monospace',
-                fontSize: fontSize - 1.5,
-                color: '#c850ff',
+                fontSize: fontSize,
+                fontWeight: 700,
+                color: '#e0e0ff',
                 textAlign: 'center',
-                lineHeight: 1,
-                opacity: 0.9,
+                lineHeight: 1.1,
+                textShadow: `0 0 4px ${ec.primary}`,
               }}>
-                {suffixName}
+                {card.name}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Stats / description */}

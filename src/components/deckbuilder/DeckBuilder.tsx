@@ -57,28 +57,35 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
   // Only show cards the player owns (from collection)
   const collection = gameState?.collection ?? [];
 
-  // Count cards by id in collection
+  // Stacking key: uniqueId (if modded) else base id
+  const stackKey = (c: Card) => c.uniqueId ?? c.id;
+
+  // Count cards by stack key in collection
   const collectionCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const c of collection) counts[c.id] = (counts[c.id] ?? 0) + 1;
+    for (const c of collection) counts[stackKey(c)] = (counts[stackKey(c)] ?? 0) + 1;
     return counts;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collection]);
 
-  // Count cards by id in deck
+  // Count cards by stack key in deck
   const deckCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const c of deck) counts[c.id] = (counts[c.id] ?? 0) + 1;
+    for (const c of deck) counts[stackKey(c)] = (counts[stackKey(c)] ?? 0) + 1;
     return counts;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck]);
 
-  // Unique cards in collection
+  // Unique cards in collection (unique by stackKey)
   const uniqueCollection = useMemo(() => {
     const seen = new Set<string>();
     return collection.filter((c) => {
-      if (seen.has(c.id)) return false;
-      seen.add(c.id);
+      const k = stackKey(c);
+      if (seen.has(k)) return false;
+      seen.add(k);
       return true;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collection]);
 
   // Filtered collection
@@ -92,32 +99,36 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
     }).sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   }, [uniqueCollection, filterEnergy, filterType, filterCost, search]);
 
-  // Deck sorted
+  // Deck sorted (grouped by stackKey)
   const deckSorted = useMemo(() => {
     const unique: { card: Card; qty: number }[] = [];
     const seen = new Set<string>();
     for (const c of deck) {
-      if (!seen.has(c.id)) {
-        seen.add(c.id);
-        unique.push({ card: c, qty: deckCounts[c.id] });
+      const k = stackKey(c);
+      if (!seen.has(k)) {
+        seen.add(k);
+        unique.push({ card: c, qty: deckCounts[k] });
       }
     }
     return unique.sort((a, b) => a.card.cost - b.card.cost);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck, deckCounts]);
 
   const deckValid = deck.length >= 20 && deck.length <= 30;
 
   const addToDeck = (card: Card) => {
     if (deck.length >= 30) return;
-    const inDeck = deckCounts[card.id] ?? 0;
-    const owned  = collectionCounts[card.id] ?? 0;
+    const k = stackKey(card);
+    const inDeck = deckCounts[k] ?? 0;
+    const owned  = collectionCounts[k] ?? 0;
     if (inDeck >= owned) return; // can't add more than owned
     setDeck((d) => [...d, card]);
     setSaved(false);
   };
 
-  const removeFromDeck = (cardId: string) => {
-    const idx = deck.findIndex((c) => c.id === cardId);
+  const removeFromDeck = (card: Card) => {
+    const k = stackKey(card);
+    const idx = deck.findIndex((c) => stackKey(c) === k);
     if (idx === -1) return;
     const next = [...deck];
     next.splice(idx, 1);
@@ -252,12 +263,13 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
             display: 'flex', flexWrap: 'wrap', gap: 8, alignContent: 'flex-start',
           }}>
             {filtered.map((card) => {
-              const inDeck = deckCounts[card.id] ?? 0;
-              const owned  = collectionCounts[card.id] ?? 0;
+              const k = stackKey(card);
+              const inDeck = deckCounts[k] ?? 0;
+              const owned  = collectionCounts[k] ?? 0;
               const canAdd = deck.length < 30 && inDeck < owned;
               return (
                 <motion.div
-                  key={card.id}
+                  key={k}
                   whileHover={{ y: -4 }}
                   style={{ position: 'relative', cursor: canAdd ? 'pointer' : 'default' }}
                   onClick={() => canAdd && addToDeck(card)}
@@ -316,7 +328,7 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
             <AnimatePresence>
               {deckSorted.map(({ card, qty }) => (
                 <motion.div
-                  key={card.id}
+                  key={stackKey(card)}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
@@ -327,7 +339,7 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
                     border: `1px solid ${ENERGY_COLORS[card.energy].primary}22`,
                     cursor: 'pointer',
                   }}
-                  onClick={() => removeFromDeck(card.id)}
+                  onClick={() => removeFromDeck(card)}
                 >
                   <span style={{
                     fontFamily: 'JetBrains Mono, monospace', fontSize: 9,

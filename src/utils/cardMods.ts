@@ -1,6 +1,7 @@
 import type { Card, AppliedMod, CardMods, ModRarity } from '@/types/card';
 import { MODS, MOD_MAP } from '@/data/mods';
 import type { Mod } from '@/data/mods';
+import { generateCardName } from './nameGenerator';
 
 // ── Rarity from mod count ─────────────────────────────────────────────────────
 
@@ -156,7 +157,16 @@ export function generateModdedCard(baseCard: Card, modCount: number): Card {
 
   const clampedCount = Math.min(4, Math.max(0, modCount));
   const mods = pickMods(baseCard, clampedCount);
-  const displayName = buildDisplayName(baseCard, mods);
+
+  // Deterministic unique id: baseCard.id + sorted mod fingerprint
+  const modKey = mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_');
+  const uniqueId = `${baseCard.id}__${modKey}`;
+
+  // Generated unique name (cyberpunk, deterministic)
+  const generatedName = generateCardName(baseCard, mods);
+  // Legacy display name (Prefix CardName of Suffix) — kept for mod tooltip header
+  const displayName = generatedName;
+
   const modRarity = rarityFromModCount(mods.length);
   const statOverrides = applyModStats(baseCard, mods);
 
@@ -170,6 +180,8 @@ export function generateModdedCard(baseCard: Card, modCount: number): Card {
   return {
     ...baseCard,
     ...statOverrides,
+    name: generatedName,
+    uniqueId,
     mods: cardMods,
   };
 }

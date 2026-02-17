@@ -34,6 +34,8 @@ export interface KeywordData {
 export interface Card {
   id: string;
   name: string;
+  /** Unique instance key (base id + mod fingerprint). Used for deck stacking. */
+  uniqueId?: string;
   energy: EnergyType;
   type: CardType;
   cost: number;
