@@ -3,6 +3,92 @@ import type { CraftingItemId } from '@/types/game';
 import { generateModdedCard, modCountForDifficulty } from '@/utils/cardMods';
 import { ENEMIES } from '@/data/enemies';
 import { rollCraftingDrop } from '@/data/craftingItems';
+import { MOD_MAP } from '@/data/mods';
+
+// ── Mod special helpers ───────────────────────────────────────────────────────
+
+function getModSpecial(card: CardInPlay, specialId: string): boolean {
+  return card.card.mods?.mods.some((m) => {
+    const mod = MOD_MAP[m.modId];
+    return mod?.tiers[m.tier]?.special === specialId ||
+      (mod?.tiers[m.tier]?.special?.startsWith(specialId.split('_')[0]) &&
+       specialId.startsWith(mod?.tiers[m.tier]?.special?.split('_')[0] ?? '___'));
+  }) ?? false;
+}
+
+// Returns drain value (0 if none)
+function getDrainValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'drain_3') return 1;
+    if (sp === 'drain_2') return 2;
+    if (sp === 'drain_1') return 3;
+  }
+  return 0;
+}
+
+// Returns corrode values { atk, def }
+function getCorrodeValue(card: CardInPlay): { atk: number; def: number } {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'corrode_3') return { atk: 0, def: 1 };
+    if (sp === 'corrode_2') return { atk: 1, def: 1 };
+    if (sp === 'corrode_1') return { atk: 2, def: 1 };
+  }
+  return { atk: 0, def: 0 };
+}
+
+// Returns detonate damage (0 if none)
+function getDetonateValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'detonate_3') return 1;
+    if (sp === 'detonate_2') return 2;
+    if (sp === 'detonate_1') return 3;
+  }
+  return 0;
+}
+
+// Returns recurse probability (0 if none)
+function getRecurseChance(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'recurse_3') return 0.3;
+    if (sp === 'recurse_2') return 0.5;
+    if (sp === 'recurse_1') return 1.0;
+  }
+  return 0;
+}
+
+// Returns amp bonus for scripts
+function getAmpBonus(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'amp_3') return 1;
+    if (sp === 'amp_2') return 2;
+    if (sp === 'amp_1') return 3;
+  }
+  return 0;
+}
+
+// Returns siphon heal bonus for scripts
+function getSiphonValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'siphon_3') return 1;
+    if (sp === 'siphon_2') return 2;
+    if (sp === 'siphon_1') return 3;
+  }
+  return 0;
+}
+
+void getModSpecial;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -281,15 +367,23 @@ export class BattleEngine {
     const effect = inPlay.card.effect;
     if (!effect) return;
 
+    const amp = getAmpBonus(inPlay);
+    const siphon = getSiphonValue(inPlay);
+
     if (effect.type === 'damage') {
+      const dmg = (effect.value ?? 0) + amp;
       if (effect.target === 'any' && targetId) {
         const t = opponent.field.find((c) => c.instanceId === targetId);
-        if (t) { this._dealDamageToAgent(t, opponent, effect.value ?? 0); }
-        else   { opponent.health -= effect.value ?? 0; }
+        if (t) { this._dealDamageToAgent(t, opponent, dmg); }
+        else   { opponent.health -= dmg; }
       } else if (effect.target === 'all_enemy_agents') {
-        for (const t of [...opponent.field]) this._dealDamageToAgent(t, opponent, effect.value ?? 0);
+        for (const t of [...opponent.field]) this._dealDamageToAgent(t, opponent, dmg);
       } else if (!targetId) {
-        opponent.health -= effect.value ?? 0;
+        opponent.health -= dmg;
+      }
+      // Siphon: heal owner after dealing damage
+      if (siphon > 0) {
+        owner.health = Math.min(owner.maxHealth, owner.health + siphon);
       }
     } else if (effect.type === 'heal') {
       owner.health = Math.min(owner.maxHealth, owner.health + (effect.value ?? 0));
@@ -421,8 +515,19 @@ export class BattleEngine {
         const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
         const blockerArmor  = blocker.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
 
-        this._dealDamageToAgent(blocker,  enemy,  Math.max(0, attackerDmg - blockerArmor));
+        this._dealDamageToAgent(blocker,  enemy,  Math.max(0, attackerDmg - blockerArmor), attacker, player);
         this._dealDamageToAgent(attacker, player, Math.max(0, blockerDmg  - attackerArmor));
+
+        // Corrode: reduce blocker's stats permanently on attack
+        const corrode = getCorrodeValue(attacker);
+        if (corrode.atk > 0 || corrode.def > 0) {
+          // blocker may have been removed; only apply if still on field
+          const stillAlive = enemy.field.find((c) => c.instanceId === blocker.instanceId);
+          if (stillAlive) {
+            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
+            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+          }
+        }
 
         events.push({ type: 'combat', attacker, blocker, attackerDmg, blockerDmg });
       } else {
@@ -431,6 +536,13 @@ export class BattleEngine {
         enemy.health -= dmg;
         events.push({ type: 'direct', attacker, damage: dmg });
         this._log(`${attacker.card.name} deals ${dmg} direct damage!`);
+
+        // Drain: heal player on direct damage
+        const drain = getDrainValue(attacker);
+        if (drain > 0) {
+          player.health = Math.min(player.maxHealth, player.health + drain);
+          this._log(`${attacker.card.name} drains ${drain} life!`);
+        }
       }
     }
 
@@ -487,6 +599,11 @@ export class BattleEngine {
         player.health -= attacker.currentAttack;
         events.push({ type: 'direct', attacker, damage: attacker.currentAttack });
         this._log(`Enemy ${attacker.card.name} deals ${attacker.currentAttack} direct!`);
+        // Enemy drain: heal enemy on direct hit
+        const drain = getDrainValue(attacker);
+        if (drain > 0) {
+          enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
+        }
       }
     }
 
@@ -499,7 +616,9 @@ export class BattleEngine {
   private _dealDamageToAgent(
     target: CardInPlay,
     owner: CombatantState,
-    amount: number
+    amount: number,
+    attacker?: CardInPlay,
+    attackerOwner?: CombatantState,
   ) {
     target.currentDefense -= amount;
     if (target.currentDefense <= 0) {
@@ -513,6 +632,35 @@ export class BattleEngine {
           a.buffs = a.buffs.filter((b) => b.source !== target.card.id);
         }
         this._log(`${target.card.name} is destroyed!`);
+
+        // Detonate: deal damage to all enemy agents + player on death
+        const detonate = getDetonateValue(target);
+        if (detonate > 0) {
+          const opp = owner === this.state.player ? this.state.enemy : this.state.player;
+          for (const f of [...opp.field]) {
+            this._dealDamageToAgent(f, opp, detonate);
+          }
+          if (detonate >= 3) opp.health -= detonate;
+          this._log(`${target.card.name} DETONATES for ${detonate}!`);
+        }
+
+        // Recurse: chance to return to hand on death
+        const recurseChance = getRecurseChance(target);
+        if (recurseChance > 0 && Math.random() < recurseChance) {
+          // Reset to base stats and return to hand
+          const fresh = { ...target, currentAttack: target.card.attack ?? 0, currentDefense: target.card.defense ?? 0, tapped: false, buffs: [], summonedThisTurn: false };
+          owner.hand.push(fresh);
+          // Remove from discard
+          const di = owner.discard.indexOf(target.card);
+          if (di !== -1) owner.discard.splice(di, 1);
+          this._log(`${target.card.name} recurses back to hand!`);
+        }
+      }
+    } else if (attacker && attackerOwner) {
+      // Drain on combat hit (target survived)
+      const drain = getDrainValue(attacker);
+      if (drain > 0) {
+        attackerOwner.health = Math.min(attackerOwner.maxHealth, attackerOwner.health + drain);
       }
     }
   }

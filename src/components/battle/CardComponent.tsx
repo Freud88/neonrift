@@ -1,10 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Card, CardInPlay } from '@/types/card';
 import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
+
+const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
+const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
 
@@ -38,6 +42,7 @@ export default function CardComponent({
   disabled = false,
   onClick,
 }: CardComponentProps) {
+  const [showModTooltip, setShowModTooltip] = useState(false);
   const ec = ENERGY_COLORS[card.energy];
   const { w, h, fontSize } = SIZE_DIMS[size];
 
@@ -63,6 +68,8 @@ export default function CardComponent({
   return (
     <motion.div
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => { if (cardMods && cardMods.mods.length > 0) setShowModTooltip(true); }}
+      onMouseLeave={() => setShowModTooltip(false)}
       style={{
         width: w,
         height: h,
@@ -284,6 +291,52 @@ export default function CardComponent({
             />
           )}
         </>
+      )}
+
+      {/* Mod tooltip on hover */}
+      {showModTooltip && cardMods && cardMods.mods.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '110%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 999,
+          background: 'rgba(5,5,20,0.98)',
+          border: `1px solid ${rarityBorderColor ?? ec.primary}`,
+          borderRadius: 4,
+          padding: '7px 10px',
+          minWidth: 150,
+          pointerEvents: 'none',
+          boxShadow: `0 0 12px ${rarityBorderColor ?? ec.primary}44`,
+        }}>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: rarityBorderColor ?? ec.primary, letterSpacing: '0.15em', marginBottom: 5, textAlign: 'center' }}>
+            {(cardMods.modRarity ?? 'common').toUpperCase()} · {cardMods.mods.length} MOD{cardMods.mods.length > 1 ? 'S' : ''}
+          </div>
+          {cardMods.mods.map((applied, i) => {
+            const mod = MOD_MAP[applied.modId];
+            if (!mod) return null;
+            const tier = applied.tier as 1 | 2 | 3;
+            const effect = mod.tiers[tier];
+            return (
+              <div key={i} style={{ marginBottom: i < cardMods.mods.length - 1 ? 5 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: TIER_COLOR[tier], fontWeight: 700, background: 'rgba(255,255,255,0.05)', padding: '1px 3px', borderRadius: 2 }}>
+                    {TIER_LABEL[tier]}
+                  </span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#e0e0ff', fontWeight: 700 }}>
+                    {mod.name}
+                  </span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: '#555577' }}>
+                    {mod.type === 'prefix' ? '⬆' : '⬇'}
+                  </span>
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: '#8888aa', marginTop: 1, marginLeft: 4 }}>
+                  {effect.description}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </motion.div>
   );

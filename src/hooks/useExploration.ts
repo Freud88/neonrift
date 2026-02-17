@@ -43,6 +43,9 @@ export function useExploration(
   const isActiveRef = useRef<boolean>(isActive);
   // Keep ref in sync with prop (readable inside RAF loop without closure issues)
   isActiveRef.current = isActive;
+  // Keep callbacks ref in sync so the RAF loop always calls the latest version
+  const callbacksRef = useRef<ExplorationCallbacks>(callbacks);
+  callbacksRef.current = callbacks;
   // Prevent re-triggering contacts for 5 s after a battle/interaction starts
   const CONTACT_COOLDOWN = 5000;
 
@@ -277,7 +280,7 @@ export function useExploration(
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.enemyProfileId) {
-              callbacks.onEnemyContact(e.id, mapObj.enemyProfileId);
+              callbacksRef.current.onEnemyContact(e.id, mapObj.enemyProfileId);
             }
           }
         } else if (e.type === 'npc' && dist < INTERACTION_RANGE) {
@@ -285,19 +288,19 @@ export function useExploration(
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.npcId && mapObj.dialogueId) {
-              callbacks.onNPCContact(mapObj.npcId, mapObj.dialogueId);
+              callbacksRef.current.onNPCContact(mapObj.npcId, mapObj.dialogueId);
             }
           }
         } else if (e.type === 'dealer' && dist < INTERACTION_RANGE) {
           if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
-            callbacks.onDealerContact();
+            callbacksRef.current.onDealerContact();
           }
         } else if (e.type === 'boss_gate' && dist < INTERACTION_RANGE) {
           if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
-            callbacks.onBossGateContact(
+            callbacksRef.current.onBossGateContact(
               mapObj?.enemyProfileId ?? 'madame_flux',
               mapObj?.requiredKills ?? 3
             );
@@ -307,7 +310,7 @@ export function useExploration(
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.dialogueId) {
-              callbacks.onTerminalContact(mapObj.dialogueId);
+              callbacksRef.current.onTerminalContact(mapObj.dialogueId);
             }
           }
         }
@@ -335,9 +338,10 @@ export function useExploration(
     if (e) e.defeated = true;
   }, []);
 
-  // Reset contact cooldown (call after returning from battle/shop so new contacts work immediately)
+  // Reset contact cooldown (call after returning from battle/shop)
+  // Sets a short grace period (1.5s) so the player can walk away before interactions re-trigger
   const resetContactCooldown = useCallback(() => {
-    lastInteraction.current = 0;
+    lastInteraction.current = Date.now() - CONTACT_COOLDOWN + 1500;
   }, []);
 
   // Teleport player back to spawn point (after a loss)
