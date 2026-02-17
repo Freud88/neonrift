@@ -9,8 +9,9 @@ interface FieldComponentProps {
   traps: CardInPlay[];
   side: 'player' | 'enemy';
   attackers?: string[];
-  onCardClick?: (instanceId: string) => void;
+  onCardClick?: (instanceId: string, e?: React.MouseEvent) => void;
   canAttack?: boolean;
+  isTargeting?: boolean;
 }
 
 export default function FieldComponent({
@@ -20,6 +21,7 @@ export default function FieldComponent({
   attackers = [],
   onCardClick,
   canAttack = false,
+  isTargeting = false,
 }: FieldComponentProps) {
   const isPlayer = side === 'player';
   const agents = cards.filter((c) => c.card.type === 'agent');
@@ -77,7 +79,10 @@ export default function FieldComponent({
         <AnimatePresence>
           {agents.map((c) => {
             const isAttacking = attackers.includes(c.instanceId);
-            const isClickable = isPlayer && canAttack && !c.tapped && !c.summonedThisTurn;
+            const isPlayerClickable = isPlayer && canAttack && !c.tapped && !c.summonedThisTurn;
+            // Enemy agents are clickable when player is in targeting mode
+            const isEnemyTargetable = !isPlayer && isTargeting;
+            const isClickable = isPlayerClickable || isEnemyTargetable;
 
             return (
               <motion.div
@@ -92,16 +97,20 @@ export default function FieldComponent({
                 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                <CardComponent
-                  card={c.card}
-                  inPlay={c}
-                  size="field"
-                  selected={isAttacking}
-                  attacking={isAttacking}
-                  tapped={c.tapped}
-                  disabled={!isClickable && !(isPlayer && !canAttack)}
-                  onClick={() => onCardClick?.(c.instanceId)}
-                />
+                <div
+                  onClick={isEnemyTargetable ? (e) => { e.stopPropagation(); onCardClick?.(c.instanceId, e); } : undefined}
+                >
+                  <CardComponent
+                    card={c.card}
+                    inPlay={c}
+                    size="field"
+                    selected={isAttacking || isEnemyTargetable}
+                    attacking={isAttacking}
+                    tapped={c.tapped}
+                    disabled={!isClickable}
+                    onClick={isPlayerClickable ? () => onCardClick?.(c.instanceId) : undefined}
+                  />
+                </div>
               </motion.div>
             );
           })}

@@ -27,7 +27,7 @@ function sellPrice(card: Card): number {
   return Math.floor(cardPrice(card) * 0.3);
 }
 
-const PACK_PRICE = 100;
+const PACK_PRICE = 0;
 const PACK_SIZE  = 3;
 
 interface ShopProps {
@@ -44,6 +44,7 @@ export default function Shop({ onClose }: ShopProps) {
   const [dealerLine] = useState(() => DEALER_LINES[Math.floor(Math.random() * DEALER_LINES.length)]);
   const [buyFlash, setBuyFlash] = useState<string | null>(null);
   const [sellFlash, setSellFlash] = useState<string | null>(null);
+  const [packOpenCards, setPackOpenCards] = useState<Card[] | null>(null);
 
   // Shop inventory: 6 random cards (stable per session)
   const inventory = useMemo(() => {
@@ -64,14 +65,13 @@ export default function Shop({ onClose }: ShopProps) {
   };
 
   const handleBuyPack = () => {
-    if (credits < PACK_PRICE) return;
-    const ok = spendCredits(PACK_PRICE);
+    if (PACK_PRICE > 0 && credits < PACK_PRICE) return;
+    const ok = PACK_PRICE === 0 ? true : spendCredits(PACK_PRICE);
     if (ok) {
       const pack = shuffle([...CARDS]).slice(0, PACK_SIZE);
       for (const c of pack) addToCollection(c);
       useGameStore.getState().saveGame();
-      setBuyFlash('pack');
-      setTimeout(() => setBuyFlash(null), 1500);
+      setPackOpenCards(pack);
     }
   };
 
@@ -171,25 +171,19 @@ export default function Shop({ onClose }: ShopProps) {
             >
               <div>
                 <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 11, color: '#c850ff', letterSpacing: '0.15em', marginBottom: 3 }}>
-                  MYSTERY PACK
+                  GHOST_SIGNAL PACKET
                 </p>
                 <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6666aa' }}>
-                  3 random cards — guaranteed diversity
+                  3 encrypted programs — contents unknown until opened
                 </p>
-                {buyFlash === 'pack' && (
-                  <motion.p initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                    style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#39ff14', marginTop: 4 }}>
-                    ✓ Pack opened! 3 cards added.
-                  </motion.p>
-                )}
               </div>
               <NeonButton
                 variant="magenta"
                 size="sm"
-                disabled={credits < PACK_PRICE}
+                disabled={PACK_PRICE > 0 && credits < PACK_PRICE}
                 onClick={handleBuyPack}
               >
-                ¢ {PACK_PRICE}
+                {PACK_PRICE === 0 ? 'FREE' : `¢ ${PACK_PRICE}`}
               </NeonButton>
             </motion.div>
 
@@ -295,6 +289,57 @@ export default function Shop({ onClose }: ShopProps) {
           </>
         )}
       </div>
+
+      {/* Pack open reveal overlay */}
+      <AnimatePresence>
+        {packOpenCards && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(5,5,20,0.96)',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              zIndex: 50,
+            }}
+          >
+            <motion.p
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#c850ff', letterSpacing: '0.2em', marginBottom: 6 }}
+            >
+              SIGNAL DECRYPTED
+            </motion.p>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6666aa', marginBottom: 24 }}>
+              3 programs extracted from the ghost signal
+            </p>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {packOpenCards.map((card, i) => (
+                <motion.div
+                  key={card.id + i}
+                  initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
+                  animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+                  transition={{ delay: i * 0.25, type: 'spring', stiffness: 200 }}
+                >
+                  <CardComponent card={card} size="hand" selected={false} />
+                </motion.div>
+              ))}
+            </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.9 }}
+              style={{ marginTop: 28 }}
+            >
+              <NeonButton variant="magenta" size="lg" onClick={() => setPackOpenCards(null)}>
+                ADD TO COLLECTION
+              </NeonButton>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -20,6 +20,53 @@ export class AIEngine {
     this.engine.resolveEnemyAttacks();
   }
 
+  // Collect the cards the enemy would play this turn (without actually playing them).
+  // Returns list of { instanceId, targetId } to play in order.
+  planEnemyTurn(): { instanceId: string; targetId?: string }[] {
+    const actions: { instanceId: string; targetId?: string }[] = [];
+    const state  = this.engine.getState();
+    const enemy  = state.enemy;
+    const player = state.player;
+
+    const usedIds = new Set<string>();
+    let dataCells = enemy.currentDataCells;
+
+    const hand = [...enemy.hand];
+    let played = true;
+    while (played && dataCells > 0) {
+      played = false;
+      const playable = hand.filter(
+        (c) => !usedIds.has(c.instanceId) && this.engine.canPlay('enemy', c.instanceId)
+      );
+      if (playable.length === 0) break;
+      const chosen = this._chooseBestPlay(playable, enemy, player);
+      if (!chosen) break;
+
+      let targetId: string | undefined;
+      if (chosen.card.effect?.target === 'any' && player.field.length > 0) {
+        const weakest = player.field.reduce(
+          (w, c) => c.currentDefense < w.currentDefense ? c : w, player.field[0]
+        );
+        targetId = weakest.instanceId;
+      } else if (chosen.card.effect?.target === 'self' && enemy.field.length > 0) {
+        const strongest = enemy.field.filter((c) => c.card.type === 'agent')
+          .reduce((s, c) => c.currentAttack > s.currentAttack ? c : s, enemy.field[0]);
+        targetId = strongest?.instanceId;
+      } else if (chosen.card.effect?.target === 'enemy_agent' && player.field.length > 0) {
+        const weakest = player.field.reduce(
+          (w, c) => c.currentDefense < w.currentDefense ? c : w, player.field[0]
+        );
+        targetId = weakest.instanceId;
+      }
+
+      usedIds.add(chosen.instanceId);
+      dataCells -= chosen.card.cost;
+      actions.push({ instanceId: chosen.instanceId, targetId });
+      played = true;
+    }
+    return actions;
+  }
+
   // ── Play phase ────────────────────────────────────────────────────────────
 
   private _playPhase() {

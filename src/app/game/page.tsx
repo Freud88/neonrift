@@ -70,6 +70,7 @@ export default function GamePage() {
   const [showDistrictVictory, setShowDistrictVictory] = useState(false);
   const [showSettings, setShowSettings]             = useState(false);
   const [pendingBattleResult, setPendingBattleResult] = useState<{ profileId: string } | null>(null);
+  const [lastBattleResult, setLastBattleResult]     = useState<'win' | 'lose' | null>(null);
 
   useEffect(() => {
     if (!gameState) router.replace('/');
@@ -104,6 +105,7 @@ export default function GamePage() {
 
   const handleBattleEnd = useCallback((result: 'win' | 'lose') => {
     const profileId = pendingBattle?.profileId ?? '';
+    setLastBattleResult(result);
 
     // Check if boss was defeated → district victory
     if (result === 'win' && profileId === 'madame_flux') {
@@ -173,6 +175,8 @@ export default function GamePage() {
           onShopOpen={() => { setScreen('shop'); setScene('shop'); }}
           onDeckOpen={() => { setScreen('deckbuilder'); setScene('deckbuilder'); }}
           onCraftingOpen={() => setScreen('crafting')}
+          isActive={screen === 'exploration'}
+          lastBattleResult={lastBattleResult}
         />
       </div>
 

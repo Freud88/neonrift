@@ -5,7 +5,7 @@ import { BattleEngine, type BattleState, type AttackEvent } from '@/engine/Battl
 import { AIEngine } from '@/engine/AIEngine';
 import { ENEMIES } from '@/data/enemies';
 import { CARD_MAP } from '@/data/cards';
-import type { Card } from '@/types/card';
+import type { Card, CardInPlay } from '@/types/card';
 import type { AIType } from '@/types/enemy';
 
 interface DamageNumber {
@@ -25,6 +25,7 @@ interface BattleStoreState {
   damageNumbers: DamageNumber[];
   selectedCardId: string | null;   // card highlighted in hand
   isAnimating: boolean;
+  pendingEnemyCard: CardInPlay | null;   // card enemy just played — waiting for player ack
 
   // Actions
   startBattle: (playerDeck: Card[], enemyProfileId: string) => void;
@@ -35,6 +36,7 @@ interface BattleStoreState {
   declareAttacker: (instanceId: string) => void;
   confirmAttack: () => Promise<void>;
   endPlayerTurn: () => Promise<void>;
+  acknowledgeEnemyCard: () => void;
   clearBattle: () => void;
   sync: () => void;
 }
@@ -48,6 +50,7 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
   damageNumbers: [],
   selectedCardId: null,
   isAnimating: false,
+  pendingEnemyCard: null,
 
   startBattle: (playerDeck, enemyProfileId) => {
     const profile = ENEMIES[enemyProfileId];
@@ -130,11 +133,37 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
 
     await _delay(300);
 
-    // Run enemy AI
+    // Run enemy AI card-by-card, pausing for player acknowledgement on each card
     if (engine.getState().result === 'pending') {
-      ai.runEnemyTurn();
-      set({ battleState: { ...engine.getState() } });
-      await _delay(800);
+      const actions = ai.planEnemyTurn();
+
+      for (const action of actions) {
+        if (engine.getState().result !== 'pending') break;
+
+        // Capture the card before playing it (for the overlay)
+        const cardInHand = engine.getState().enemy.hand.find(
+          (c) => c.instanceId === action.instanceId
+        );
+
+        engine.playCard('enemy', action.instanceId, action.targetId);
+        set({ battleState: { ...engine.getState() } });
+
+        if (cardInHand) {
+          // Show notification — wait for player to acknowledge
+          set({ pendingEnemyCard: cardInHand });
+          await _waitForAck(get);
+          set({ pendingEnemyCard: null });
+        }
+
+        await _delay(200);
+      }
+
+      // Enemy attack phase
+      if (engine.getState().result === 'pending') {
+        engine.resolveEnemyAttacks();
+        set({ battleState: { ...engine.getState() } });
+        await _delay(600);
+      }
     }
 
     if (engine.getState().result === 'pending') {
@@ -143,6 +172,10 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
     }
 
     set({ isAnimating: false });
+  },
+
+  acknowledgeEnemyCard: () => {
+    set({ pendingEnemyCard: null });
   },
 
   sync: () => {
@@ -160,9 +193,24 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       damageNumbers: [],
       selectedCardId: null,
       isAnimating: false,
+      pendingEnemyCard: null,
     }),
 }));
 
 function _delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+// Poll until pendingEnemyCard is cleared (player acknowledged the card)
+function _waitForAck(get: () => BattleStoreState): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      if (!get().pendingEnemyCard) {
+        resolve();
+      } else {
+        setTimeout(check, 50);
+      }
+    };
+    check();
+  });
 }

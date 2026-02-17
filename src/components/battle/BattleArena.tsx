@@ -8,6 +8,7 @@ import { ENEMIES } from '@/data/enemies';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
 import BattleHUD from './BattleHUD';
+import CardComponent from './CardComponent';
 import FieldComponent from './FieldComponent';
 import HandComponent from './HandComponent';
 import MulliganScreen from './MulliganScreen';
@@ -25,6 +26,7 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
     battleState,
     selectedCardId,
     isAnimating,
+    pendingEnemyCard,
     acceptHand,
     doMulligan,
     selectCard,
@@ -32,6 +34,7 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
     declareAttacker,
     confirmAttack,
     endPlayerTurn,
+    acknowledgeEnemyCard,
     clearBattle,
     engine,
   } = useBattleStore();
@@ -239,6 +242,7 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
           cards={enemy.field}
           traps={enemy.traps}
           side="enemy"
+          isTargeting={requiresTarget}
           onCardClick={(id) => handleFieldClick(id, 'enemy')}
         />
       </div>
@@ -324,6 +328,53 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
         events={damageEvents}
         onExpire={(id) => setDamageEvents((prev) => prev.filter((e) => e.id !== id))}
       />
+
+      {/* Enemy card notification overlay */}
+      <AnimatePresence>
+        {pendingEnemyCard && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            style={{
+              position: 'absolute',
+              bottom: 160,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 15,
+              background: 'rgba(5,5,20,0.97)',
+              border: '1px solid #ff4444',
+              padding: '12px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+              minWidth: 180,
+            }}
+          >
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#ff4444', letterSpacing: '0.2em' }}>
+              ENEMY PLAYS
+            </p>
+            <CardComponent card={pendingEnemyCard.card} size="hand" selected={false} />
+            <button
+              onClick={acknowledgeEnemyCard}
+              style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                background: 'rgba(255,68,68,0.15)',
+                border: '1px solid #ff4444',
+                color: '#ff4444',
+                padding: '6px 18px',
+                cursor: 'pointer',
+              }}
+            >
+              OK
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Hand area */}
       <div style={{

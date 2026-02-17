@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useGameStore } from '@/stores/gameStore';
 import { useExploration } from '@/hooks/useExploration';
 import { DIALOGUES } from '@/data/dialogues';
@@ -15,6 +15,8 @@ interface ExplorationViewProps {
   onShopOpen: () => void;
   onDeckOpen: () => void;
   onCraftingOpen: () => void;
+  isActive: boolean;              // true when this screen is visible
+  lastBattleResult?: 'win' | 'lose' | null;
 }
 
 export default function ExplorationView({
@@ -22,6 +24,8 @@ export default function ExplorationView({
   onShopOpen,
   onDeckOpen,
   onCraftingOpen,
+  isActive,
+  lastBattleResult,
 }: ExplorationViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { gameState } = useGameStore();
@@ -88,13 +92,26 @@ export default function ExplorationView({
     if (d) setActiveDialogue(d);
   }, [onCraftingOpen]);
 
-  const { engineRef, entitiesRef } = useExploration(canvasRef, defeatedEnemies, {
+  const { engineRef, entitiesRef, resetContactCooldown, teleportToSpawn } = useExploration(canvasRef, defeatedEnemies, {
     onEnemyContact:    handleEnemyContact,
     onNPCContact:      handleNPCContact,
     onDealerContact:   handleDealerContact,
     onBossGateContact: handleBossGateContact,
     onTerminalContact: handleTerminalContact,
   }, joystick);
+
+  // When this screen becomes active again (returning from battle/shop/crafting),
+  // reset contact cooldown so the player can immediately interact with entities.
+  useEffect(() => {
+    if (isActive) resetContactCooldown();
+  }, [isActive, resetContactCooldown]);
+
+  // Teleport to spawn when the last battle result was a loss
+  useEffect(() => {
+    if (isActive && lastBattleResult === 'lose') {
+      teleportToSpawn();
+    }
+  }, [isActive, lastBattleResult, teleportToSpawn]);
 
   return (
     <div className="relative w-full h-full overflow-hidden" style={{ background: '#0a0a0f' }}>

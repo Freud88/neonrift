@@ -324,5 +324,20 @@ export function useExploration(
     if (e) e.defeated = true;
   }, []);
 
-  return { engineRef, entitiesRef, markEnemyDefeated };
+  // Reset contact cooldown (call after returning from battle/shop so new contacts work immediately)
+  const resetContactCooldown = useCallback(() => {
+    lastInteraction.current = 0;
+  }, []);
+
+  // Teleport player back to spawn point (after a loss)
+  const teleportToSpawn = useCallback(() => {
+    const player = entitiesRef.current.find((e) => e.id === 'player');
+    if (player) {
+      player.x = NEON_ROW_MAP.playerSpawn.x * TILE_SIZE + TILE_SIZE / 2;
+      player.y = NEON_ROW_MAP.playerSpawn.y * TILE_SIZE + TILE_SIZE / 2;
+    }
+    lastInteraction.current = 0;
+  }, []);
+
+  return { engineRef, entitiesRef, markEnemyDefeated, resetContactCooldown, teleportToSpawn };
 }
