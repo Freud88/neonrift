@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion';
 import type { Card, CardInPlay } from '@/types/card';
 import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
+import { MOD_RARITY_COLOR } from '@/utils/cardMods';
+import { MOD_MAP } from '@/data/mods';
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
 
@@ -47,6 +49,17 @@ export default function CardComponent({
     (inPlay.currentDefense !== (card.defense ?? 0))
   );
 
+  // Mod system
+  const cardMods = card.mods;
+  const modRarity = cardMods?.modRarity;
+  const rarityBorderColor = modRarity && modRarity !== 'common' ? MOD_RARITY_COLOR[modRarity] : null;
+  const displayName = cardMods?.displayName ?? card.name;
+  const prefixMod = cardMods?.mods.find((m) => MOD_MAP[m.modId]?.type === 'prefix');
+  const suffixMod = cardMods?.mods.find((m) => MOD_MAP[m.modId]?.type === 'suffix');
+  const prefixName = prefixMod ? MOD_MAP[prefixMod.modId]?.name : null;
+  const suffixName = suffixMod ? MOD_MAP[suffixMod.modId]?.name : null;
+  const modSlots = cardMods?.mods.length ?? 0;
+
   return (
     <motion.div
       onClick={disabled ? undefined : onClick}
@@ -54,12 +67,14 @@ export default function CardComponent({
         width: w,
         height: h,
         background: faceDown ? '#0d0d1a' : ec.bg,
-        border: `1.5px solid ${selected || attacking ? '#ffffff' : ec.primary}`,
+        border: `1.5px solid ${selected || attacking ? '#ffffff' : rarityBorderColor ?? ec.primary}`,
         borderRadius: 4,
         boxShadow: selected
-          ? `0 0 14px #fff, 0 0 6px ${ec.primary}`
+          ? `0 0 14px #fff, 0 0 6px ${rarityBorderColor ?? ec.primary}`
           : attacking
           ? `0 0 12px #ff4444`
+          : rarityBorderColor
+          ? `0 0 8px ${rarityBorderColor}, 0 0 4px ${ec.glow}`
           : `0 0 6px ${ec.glow}`,
         cursor: disabled ? 'default' : 'pointer',
         position: 'relative',
@@ -137,10 +152,25 @@ export default function CardComponent({
             }}>
               {ENERGY_ICON[card.energy]}
             </span>
+            {/* Prefix name */}
+            {prefixName && (
+              <div style={{
+                position: 'absolute',
+                top: 2, left: 2, right: 2,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: fontSize - 1.5,
+                color: rarityBorderColor ?? ec.primary,
+                textAlign: 'center',
+                lineHeight: 1,
+                opacity: 0.9,
+              }}>
+                {prefixName}
+              </div>
+            )}
             {/* Name */}
             <div style={{
               position: 'absolute',
-              bottom: 2, left: 2, right: 2,
+              bottom: suffixName ? 10 : 2, left: 2, right: 2,
               fontFamily: 'JetBrains Mono, monospace',
               fontSize: fontSize,
               fontWeight: 700,
@@ -149,8 +179,23 @@ export default function CardComponent({
               lineHeight: 1.1,
               textShadow: `0 0 4px ${ec.primary}`,
             }}>
-              {card.name}
+              {displayName.replace(prefixName ? prefixName + ' ' : '', '').replace(suffixName ? ' ' + suffixName : '', '')}
             </div>
+            {/* Suffix name */}
+            {suffixName && (
+              <div style={{
+                position: 'absolute',
+                bottom: 2, left: 2, right: 2,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: fontSize - 1.5,
+                color: '#c850ff',
+                textAlign: 'center',
+                lineHeight: 1,
+                opacity: 0.9,
+              }}>
+                {suffixName}
+              </div>
+            )}
           </div>
 
           {/* Stats / description */}
@@ -182,11 +227,29 @@ export default function CardComponent({
             )}
           </div>
 
+          {/* Mod slot indicators (only if has mods or preview size) */}
+          {(modSlots > 0 || size === 'preview') && (
+            <div style={{
+              display: 'flex', justifyContent: 'center', gap: 2,
+              padding: '2px 0 1px',
+            }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} style={{
+                  width: 5, height: 5,
+                  borderRadius: 1,
+                  background: i < modSlots ? (rarityBorderColor ?? ec.primary) : 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${i < modSlots ? (rarityBorderColor ?? ec.primary) : 'rgba(255,255,255,0.12)'}`,
+                  boxShadow: i < modSlots ? `0 0 3px ${rarityBorderColor ?? ec.primary}` : 'none',
+                }} />
+              ))}
+            </div>
+          )}
+
           {/* Energy color stripe at bottom */}
           <div style={{
             height: 2,
-            background: ec.primary,
-            boxShadow: `0 0 4px ${ec.glow}`,
+            background: rarityBorderColor ?? ec.primary,
+            boxShadow: `0 0 4px ${rarityBorderColor ?? ec.glow}`,
           }} />
 
           {/* Corner accents */}

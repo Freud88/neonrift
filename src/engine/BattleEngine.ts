@@ -1,4 +1,6 @@
 import type { Card, CardInPlay } from '@/types/card';
+import { generateModdedCard, modCountForDifficulty } from '@/utils/cardMods';
+import { ENEMIES } from '@/data/enemies';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -544,8 +546,12 @@ export class BattleEngine {
     if (this.state.log.length > 50) this.state.log.shift();
   }
 
-  // Generate 3 random reward cards from enemy deck
+  // Generate 3 random reward cards from enemy deck, with mods based on difficulty
   getRewardChoices(): Card[] {
+    const profile = ENEMIES[this.state.enemyProfileId];
+    const difficulty = profile?.difficulty ?? 1;
+    const isBoss = profile?.isBoss ?? false;
+
     const enemyCards = [
       ...this.state.enemy.discard,
       ...this.state.enemy.deck,
@@ -556,7 +562,10 @@ export class BattleEngine {
       if (!seen.has(c.id)) { seen.add(c.id); unique.push(c); }
     }
     const shuffled = shuffle(unique);
-    return shuffled.slice(0, 3);
+    return shuffled.slice(0, 3).map((c) => {
+      const modCount = modCountForDifficulty(difficulty, isBoss);
+      return generateModdedCard(c, modCount);
+    });
   }
 }
 

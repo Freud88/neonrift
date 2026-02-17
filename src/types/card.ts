@@ -3,6 +3,22 @@ export type CardType = 'agent' | 'script' | 'malware' | 'trap';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type Keyword = 'overclock' | 'decrypt' | 'stealth' | 'armor' | 'regen';
 
+// ── Mod system ────────────────────────────────────────────────────────────────
+export type ModRarity = 'common' | 'coded' | 'enhanced' | 'overclocked' | 'corrupted';
+
+export interface AppliedMod {
+  modId: string;    // references MODS[id]
+  tier: 1 | 2 | 3;
+}
+
+// A card that has been randomized with mods. All optional so base cards still work.
+export interface CardMods {
+  mods: AppliedMod[];           // 0–4 mods (max 2 prefix + 2 suffix)
+  modRarity: ModRarity;
+  displayName: string;          // e.g. "Ionized Shock Trooper of Stealth"
+  locked: string[];             // modIds locked by Quantum Lock
+}
+
 export interface CardEffect {
   type: 'damage' | 'heal' | 'draw' | 'buff' | 'debuff' | 'bounce' | 'counter' | 'reveal' | 'summon';
   value?: number;
@@ -31,6 +47,8 @@ export interface Card {
   effect?: CardEffect;
   // Trap trigger condition
   triggerCondition?: 'on_attack' | 'on_play_agent' | 'on_play_script' | 'on_damage';
+  // Mod system (absent on base cards)
+  mods?: CardMods;
 }
 
 export interface CardInPlay {
