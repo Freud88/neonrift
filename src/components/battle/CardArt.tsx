@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import type { Card } from '@/types/card';
 import { seededRandom } from '@/utils/seededRandom';
@@ -16,15 +16,27 @@ const ENERGY_BASE: Record<string, [string, string]> = {
   neutral: ['#0d0d1a', '#8888cc'],
 };
 
-// Agent artwork pool (seeded pick)
-const AGENT_ART = [
-  '/Cards/Art/Agent 1.png',
-  '/Cards/Art/Agent 2.png',
-  '/Cards/Art/Agent 3.png',
-  '/Cards/Art/Agent 4.png',
-];
-
 const FRAME_SRC = '/Cards/Frame Agents.png';
+
+// Module-level cache so we only fetch once per session
+let agentArtCache: string[] | null = null;
+let agentArtPromise: Promise<string[]> | null = null;
+
+function fetchAgentArt(): Promise<string[]> {
+  if (agentArtCache) return Promise.resolve(agentArtCache);
+  if (agentArtPromise) return agentArtPromise;
+  agentArtPromise = fetch('/api/card-art')
+    .then((r) => r.json())
+    .then((files: string[]) => {
+      agentArtCache = files.length > 0 ? files : ['/Cards/Art/Agent 1.png'];
+      return agentArtCache;
+    })
+    .catch(() => {
+      agentArtCache = ['/Cards/Art/Agent 1.png'];
+      return agentArtCache;
+    });
+  return agentArtPromise;
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -283,14 +295,22 @@ function drawProceduralArt(
 // ── Component ────────────────────────────────────────────────────────────────
 export default function CardArt({ card, width, height }: { card: Card; width: number; height: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [agentArtList, setAgentArtList] = useState<string[]>(agentArtCache ?? []);
 
-  // Seeded art pick for agents
+  const isAgent = card.type === 'agent';
+
+  // Load agent art list once (cached at module level)
+  useEffect(() => {
+    if (!isAgent) return;
+    fetchAgentArt().then(setAgentArtList);
+  }, [isAgent]);
+
+  // Seeded art pick — stable as long as list is the same
   const modKey = card.mods?.mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_') ?? '';
   const seed = `${card.id}__${modKey}`;
   const rng = seededRandom(seed);
-  const agentArtSrc = AGENT_ART[Math.floor(rng() * AGENT_ART.length)];
-
-  const isAgent = card.type === 'agent';
+  const pool = agentArtList.length > 0 ? agentArtList : ['/Cards/Art/Agent 1.png'];
+  const agentArtSrc = pool[Math.floor(rng() * pool.length)];
 
   useEffect(() => {
     if (isAgent) return; // agent uses <img> layers, not canvas
