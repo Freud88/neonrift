@@ -3,15 +3,18 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Card } from '@/types/card';
+import type { CraftingItem } from '@/types/game';
 import CardComponent from './CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
 import { ENEMIES } from '@/data/enemies';
+import { CRAFTING_ITEMS } from '@/data/craftingItems';
 
 interface BattleRewardsProps {
   result: 'win' | 'lose';
   credits: number;
   xp: number;
   cardChoices: Card[];
+  craftingDrop?: CraftingItem | null;
   enemyProfileId: string;
   onChooseCard: (card: Card | null) => void;
   onContinue: () => void;
@@ -22,6 +25,7 @@ export default function BattleRewards({
   credits,
   xp,
   cardChoices,
+  craftingDrop,
   enemyProfileId,
   onChooseCard,
   onContinue,
@@ -94,6 +98,26 @@ export default function BattleRewards({
           <div style={{ fontSize: 9, color: '#6666aa', marginBottom: 4 }}>XP</div>
           <div style={{ fontSize: 18, color: '#ffe600', fontWeight: 700 }}>+{xp}</div>
         </div>
+        {craftingDrop && (() => {
+          const def = CRAFTING_ITEMS[craftingDrop.id];
+          return (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 9, color: '#6666aa', marginBottom: 4 }}>ITEM DROP</div>
+              <div style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: def.color,
+                textShadow: `0 0 8px ${def.color}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}>
+                <span style={{ fontSize: 16 }}>{def.icon}</span>
+                {def.name}
+              </div>
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* Card choices (only on win) */}

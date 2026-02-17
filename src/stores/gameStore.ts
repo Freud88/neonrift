@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { GameState, GameScene, GameSettings } from '@/types/game';
+import type { GameState, GameScene, GameSettings, CraftingItemId } from '@/types/game';
 import type { Card } from '@/types/card';
 import { STARTER_DECK } from '@/data/cards';
 
@@ -27,6 +27,7 @@ const defaultGameState: GameState = {
   },
   deck: [],
   collection: [],
+  inventory: [],
   progress: {
     defeatedBosses: [],
     unlockedDistricts: ['neon_row'],
@@ -60,6 +61,8 @@ interface GameStoreState {
   incrementLoss: () => void;
   markTutorialSeen: () => void;
   checkHasSave: () => void;
+  addCraftingItem: (itemId: CraftingItemId, qty?: number) => void;
+  removeCraftingItem: (itemId: CraftingItemId, qty?: number) => boolean;
 }
 
 export const useGameStore = create<GameStoreState>((set, get) => ({
@@ -274,5 +277,36 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         },
       };
     });
+  },
+
+  addCraftingItem: (itemId, qty = 1) => {
+    set((state) => {
+      if (!state.gameState) return state;
+      const inv = [...(state.gameState.inventory ?? [])];
+      const existing = inv.find((i) => i.id === itemId);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        inv.push({ id: itemId, quantity: qty });
+      }
+      return { gameState: { ...state.gameState, inventory: inv } };
+    });
+    get().saveGame();
+  },
+
+  removeCraftingItem: (itemId, qty = 1) => {
+    const { gameState } = get();
+    if (!gameState) return false;
+    const item = (gameState.inventory ?? []).find((i) => i.id === itemId);
+    if (!item || item.quantity < qty) return false;
+    set((state) => {
+      if (!state.gameState) return state;
+      const inv = (state.gameState.inventory ?? [])
+        .map((i) => i.id === itemId ? { ...i, quantity: i.quantity - qty } : i)
+        .filter((i) => i.quantity > 0);
+      return { gameState: { ...state.gameState, inventory: inv } };
+    });
+    get().saveGame();
+    return true;
   },
 }));

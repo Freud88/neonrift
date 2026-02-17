@@ -14,12 +14,14 @@ interface ExplorationViewProps {
   onBattleStart: (enemyId: string, enemyProfileId: string) => void;
   onShopOpen: () => void;
   onDeckOpen: () => void;
+  onCraftingOpen: () => void;
 }
 
 export default function ExplorationView({
   onBattleStart,
   onShopOpen,
   onDeckOpen,
+  onCraftingOpen,
 }: ExplorationViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { gameState } = useGameStore();
@@ -78,9 +80,13 @@ export default function ExplorationView({
   );
 
   const handleTerminalContact = useCallback((dialogueId: string) => {
+    if (dialogueId === 'crafting_terminal') {
+      onCraftingOpen();
+      return;
+    }
     const d = DIALOGUES[dialogueId];
     if (d) setActiveDialogue(d);
-  }, []);
+  }, [onCraftingOpen]);
 
   const { engineRef, entitiesRef } = useExploration(canvasRef, defeatedEnemies, {
     onEnemyContact:    handleEnemyContact,

@@ -9,6 +9,7 @@ import ExplorationView from '@/components/exploration/ExplorationView';
 import BattleArena from '@/components/battle/BattleArena';
 import DeckBuilder from '@/components/deckbuilder/DeckBuilder';
 import Shop from '@/components/shop/Shop';
+import CraftingPanel from '@/components/crafting/CraftingPanel';
 import TutorialOverlay from '@/components/ui/TutorialOverlay';
 import DistrictVictory from '@/components/ui/DistrictVictory';
 import SettingsModal from '@/components/ui/SettingsModal';
@@ -55,7 +56,7 @@ function GlitchTransition({ show }: { show: boolean }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type Screen = 'exploration' | 'battle' | 'shop' | 'deckbuilder';
+type Screen = 'exploration' | 'battle' | 'shop' | 'deckbuilder' | 'crafting';
 
 export default function GamePage() {
   const router = useRouter();
@@ -171,6 +172,7 @@ export default function GamePage() {
           onBattleStart={handleBattleStart}
           onShopOpen={() => { setScreen('shop'); setScene('shop'); }}
           onDeckOpen={() => { setScreen('deckbuilder'); setScene('deckbuilder'); }}
+          onCraftingOpen={() => setScreen('crafting')}
         />
       </div>
 
@@ -196,6 +198,13 @@ export default function GamePage() {
       {screen === 'deckbuilder' && (
         <div className="absolute inset-0" style={{ zIndex: 30 }}>
           <DeckBuilder onClose={handleBackToMap} />
+        </div>
+      )}
+
+      {/* Crafting Panel */}
+      {screen === 'crafting' && (
+        <div className="absolute inset-0" style={{ zIndex: 30 }}>
+          <CraftingPanel onClose={handleBackToMap} />
         </div>
       )}
 

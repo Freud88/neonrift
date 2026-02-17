@@ -2,6 +2,20 @@ import type { Card } from './card';
 
 export type GameScene = 'title' | 'exploration' | 'battle' | 'battle_rewards' | 'shop' | 'deckbuilder' | 'dialogue';
 
+// ── Crafting items ────────────────────────────────────────────────────────────
+export type CraftingItemId =
+  | 'data_fragment'
+  | 'wipe_drive'
+  | 'recompiler'
+  | 'tier_boost'
+  | 'architects_key'
+  | 'quantum_lock';
+
+export interface CraftingItem {
+  id: CraftingItemId;
+  quantity: number;
+}
+
 export interface Position {
   x: number;
   y: number;
@@ -38,6 +52,7 @@ export interface GameState {
   player: Player;
   deck: Card[];
   collection: Card[];
+  inventory: CraftingItem[];
   progress: GameProgress;
   settings: GameSettings;
 }
@@ -69,4 +84,5 @@ export interface BattleRewards {
   credits: number;
   xp: number;
   cardChoices: Card[]; // 3 cards to choose from
+  craftingDrop?: CraftingItem | null; // bonus drop
 }

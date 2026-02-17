@@ -22,6 +22,7 @@ export interface MapObject {
   npcId?: string;           // for NPCs
   dialogueId?: string;      // for terminals / NPCs
   requiredKills?: number;   // for boss gate
+  label?: string;           // display label for map rendering
 }
 
 export interface MapData {
@@ -108,6 +109,8 @@ export const NEON_ROW_MAP: MapData = {
     // ── Terminals (lore) ─────────────────────────────────────────────────
     { id: 'term1', type: 'terminal', tile: { x: 11, y: 5  }, dialogueId: 'lore_grid_origin' },
     { id: 'term2', type: 'terminal', tile: { x: 28, y: 24 }, dialogueId: 'lore_madame_flux' },
+    // ── Crafting terminal ─────────────────────────────────────────────────
+    { id: 'term_craft', type: 'terminal', tile: { x: 19, y: 10 }, dialogueId: 'crafting_terminal', label: 'CRAFT' },
   ],
 };
 

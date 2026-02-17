@@ -1,6 +1,8 @@
 import type { Card, CardInPlay } from '@/types/card';
+import type { CraftingItemId } from '@/types/game';
 import { generateModdedCard, modCountForDifficulty } from '@/utils/cardMods';
 import { ENEMIES } from '@/data/enemies';
+import { rollCraftingDrop } from '@/data/craftingItems';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -566,6 +568,13 @@ export class BattleEngine {
       const modCount = modCountForDifficulty(difficulty, isBoss);
       return generateModdedCard(c, modCount);
     });
+  }
+
+  // Roll a crafting item drop for this battle's rewards
+  getCraftingDrop(): CraftingItemId | null {
+    const profile = ENEMIES[this.state.enemyProfileId];
+    const isBoss = profile?.isBoss ?? false;
+    return rollCraftingDrop(isBoss);
   }
 }
 

@@ -6,6 +6,7 @@ import { useBattleStore } from '@/stores/battleStore';
 import { useGameStore } from '@/stores/gameStore';
 import { ENEMIES } from '@/data/enemies';
 import type { Card } from '@/types/card';
+import type { CraftingItemId } from '@/types/game';
 import BattleHUD from './BattleHUD';
 import FieldComponent from './FieldComponent';
 import HandComponent from './HandComponent';
@@ -35,11 +36,12 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
     engine,
   } = useBattleStore();
 
-  const { gameState, defeatEnemy, defeatBoss, incrementLoss, addToCollection } = useGameStore();
+  const { gameState, defeatEnemy, defeatBoss, incrementLoss, addToCollection, addCraftingItem } = useGameStore();
 
-  const [mulliganUsed, setMulliganUsed]     = useState(false);
-  const [rewardsReady, setRewardsReady]     = useState(false);
-  const [rewardCards, setRewardCards]       = useState<Card[]>([]);
+  const [mulliganUsed, setMulliganUsed]       = useState(false);
+  const [rewardsReady, setRewardsReady]       = useState(false);
+  const [rewardCards, setRewardCards]         = useState<Card[]>([]);
+  const [craftingDrop, setCraftingDrop]       = useState<CraftingItemId | null>(null);
   const [requiresTarget, setRequiresTarget] = useState(false);
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
   const [shake, setShake]                   = useState(false);
@@ -87,6 +89,7 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
       setTimeout(() => {
         if (engine && battleState.result === 'win') {
           setRewardCards(engine.getRewardChoices());
+          setCraftingDrop(engine.getCraftingDrop());
         }
         setRewardsReady(true);
       }, 800);
@@ -173,13 +176,14 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
     if (isWin) {
       defeatEnemy(enemyId, profile?.rewards.credits ?? 30, profile?.rewards.xpGain ?? 10);
       if (profile?.isBoss) defeatBoss(enemyProfileId);
+      if (craftingDrop) addCraftingItem(craftingDrop);
     } else {
       incrementLoss();
     }
 
     clearBattle();
     onBattleEnd(battleState.result as 'win' | 'lose');
-  }, [battleState, enemyId, profile, enemyProfileId, defeatEnemy, defeatBoss, incrementLoss, clearBattle, onBattleEnd]);
+  }, [battleState, enemyId, profile, enemyProfileId, craftingDrop, defeatEnemy, defeatBoss, incrementLoss, addCraftingItem, clearBattle, onBattleEnd]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -368,6 +372,7 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
           credits={profile?.rewards.credits ?? 30}
           xp={profile?.rewards.xpGain ?? 10}
           cardChoices={rewardCards}
+          craftingDrop={craftingDrop ? { id: craftingDrop, quantity: 1 } : null}
           enemyProfileId={enemyProfileId}
           onChooseCard={handleChooseCard}
           onContinue={handleContinue}

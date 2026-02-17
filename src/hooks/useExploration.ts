@@ -135,6 +135,7 @@ export function useExploration(
           radius: TERMINAL_RADIUS,
           color: '#ffe600',
           glowColor: '#ffe600',
+          label: obj.label,
         });
       }
     }
