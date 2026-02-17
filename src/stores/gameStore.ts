@@ -252,6 +252,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         },
       };
     });
+    get().saveGame();
   },
 
   incrementLoss: () => {
