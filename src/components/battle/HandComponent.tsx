@@ -43,12 +43,15 @@ export default function HandComponent({
 
     onSelect(c.instanceId);
 
-    // Scripts/malware without a target play immediately
-    const needsTarget = c.card.effect?.target === 'any'
+    // Agents play immediately to the field
+    // Scripts/malware with a specific target wait for target selection
+    const needsTarget = c.card.type !== 'agent' && (
+      c.card.effect?.target === 'any'
       || c.card.effect?.target === 'enemy_agent'
-      || c.card.effect?.target === 'self';
+      || c.card.effect?.target === 'self'
+    );
 
-    if (!needsTarget && c.card.type !== 'agent') {
+    if (!needsTarget) {
       onPlay(c.instanceId);
       onSelect(null);
     }

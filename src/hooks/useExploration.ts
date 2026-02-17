@@ -39,6 +39,8 @@ export function useExploration(
   const keysRef     = useRef<Set<string>>(new Set());
   const rafRef      = useRef<number>(0);
   const lastInteraction = useRef<number>(0);
+  // Prevent re-triggering contacts for 5 s after a battle/interaction starts
+  const CONTACT_COOLDOWN = 5000;
 
   // ── Build initial entities from map data ──────────────────────────────────
   const buildEntities = useCallback((): SpriteEntity[] => {
@@ -246,7 +248,6 @@ export function useExploration(
 
       // ── Collision detection ───────────────────────────────────────────────
       const now = Date.now();
-      const cooldown = 1000; // ms between interactions
 
       for (const e of entities) {
         if (e.defeated) continue;
@@ -254,7 +255,7 @@ export function useExploration(
 
         if (e.type === 'enemy') {
           const contactRange = player.radius + e.radius;
-          if (dist < contactRange && now - lastInteraction.current > cooldown) {
+          if (dist < contactRange && now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.enemyProfileId) {
@@ -262,7 +263,7 @@ export function useExploration(
             }
           }
         } else if (e.type === 'npc' && dist < INTERACTION_RANGE) {
-          if (now - lastInteraction.current > cooldown) {
+          if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.npcId && mapObj.dialogueId) {
@@ -270,12 +271,12 @@ export function useExploration(
             }
           }
         } else if (e.type === 'dealer' && dist < INTERACTION_RANGE) {
-          if (now - lastInteraction.current > cooldown) {
+          if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             callbacks.onDealerContact();
           }
         } else if (e.type === 'boss_gate' && dist < INTERACTION_RANGE) {
-          if (now - lastInteraction.current > cooldown) {
+          if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             callbacks.onBossGateContact(
@@ -284,7 +285,7 @@ export function useExploration(
             );
           }
         } else if (e.type === 'terminal' && dist < INTERACTION_RANGE) {
-          if (now - lastInteraction.current > cooldown) {
+          if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
             const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
             if (mapObj?.dialogueId) {
