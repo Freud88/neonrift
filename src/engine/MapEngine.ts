@@ -53,11 +53,33 @@ export class MapEngine {
   private frameCount = 0;
   private rainDrops: RainDrop[] = [];
 
+  // Player sprite frames (2-frame idle animation)
+  private playerFrames: HTMLImageElement[] = [];
+  private playerSpritesLoaded = false;
+
   constructor(canvas: HTMLCanvasElement, mapData: MapData) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.mapData = mapData;
     this._initRain();
+    this._loadPlayerSprites();
+  }
+
+  private _loadPlayerSprites() {
+    const paths = [
+      '/assets/sprites/drifter/drifter_idle1.png',
+      '/assets/sprites/drifter/drifter_idle2.png',
+    ];
+    let loaded = 0;
+    this.playerFrames = paths.map((src) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        loaded++;
+        if (loaded === paths.length) this.playerSpritesLoaded = true;
+      };
+      return img;
+    });
   }
 
   private _initRain() {
@@ -291,39 +313,39 @@ export class MapEngine {
     const r = e.radius;
     const pulse = 0.7 + 0.3 * Math.sin(this.frameCount * 0.08);
 
-    // Glow
+    // Neon glow halo (always drawn, even behind the sprite)
     const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 2.5);
-    grd.addColorStop(0, `rgba(0,240,255,${0.25 * pulse})`);
+    grd.addColorStop(0, `rgba(0,240,255,${0.22 * pulse})`);
     grd.addColorStop(1, 'rgba(0,240,255,0)');
     ctx.fillStyle = grd;
     ctx.beginPath();
     ctx.arc(sx, sy, r * 2.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Body
-    ctx.fillStyle = '#1a1a3a';
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Neon ring
-    ctx.strokeStyle = '#00f0ff';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Direction indicator (small triangle pointing up = top-down sprite approximation)
-    ctx.fillStyle = '#00f0ff';
-    ctx.beginPath();
-    ctx.moveTo(sx, sy - r + 4);
-    ctx.lineTo(sx - 4, sy + r - 6);
-    ctx.lineTo(sx + 4, sy + r - 6);
-    ctx.closePath();
-    ctx.fill();
+    if (this.playerSpritesLoaded) {
+      // 2-frame idle: switch every ~30 render frames (~0.5 s at 60 fps)
+      const frameIdx = Math.floor(this.frameCount / 30) % this.playerFrames.length;
+      const img = this.playerFrames[frameIdx];
+      const spriteW = 32;
+      const spriteH = 32;
+      // Draw centered on (sx, sy), pixel-perfect (no smoothing for pixel art)
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, sx - spriteW / 2, sy - spriteH / 2, spriteW, spriteH);
+    } else {
+      // Fallback: plain cyan circle until images load
+      ctx.fillStyle = '#1a1a3a';
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
   }
 
   private drawEnemy(sx: number, sy: number, e: SpriteEntity) {
