@@ -21,6 +21,7 @@ const AGENT_ART = [
   '/Cards/Art/Agent 1.png',
   '/Cards/Art/Agent 2.png',
   '/Cards/Art/Agent 3.png',
+  '/Cards/Art/Agent 4.png',
 ];
 
 const FRAME_SRC = '/Cards/Frame Agents.png';
