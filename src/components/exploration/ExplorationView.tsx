@@ -98,7 +98,7 @@ export default function ExplorationView({
     onDealerContact:   handleDealerContact,
     onBossGateContact: handleBossGateContact,
     onTerminalContact: handleTerminalContact,
-  }, joystick);
+  }, joystick, isActive);
 
   // When this screen becomes active again (returning from battle/shop/crafting),
   // reset contact cooldown so the player can immediately interact with entities.

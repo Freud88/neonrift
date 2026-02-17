@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CARDS } from '@/data/cards';
 import { shuffle } from '@/engine/BattleEngine';
+import { generateModdedCard } from '@/utils/cardMods';
 import type { Card } from '@/types/card';
 import { ENERGY_COLORS } from '@/utils/energyColors';
 import CardComponent from '@/components/battle/CardComponent';
@@ -46,10 +47,13 @@ export default function Shop({ onClose }: ShopProps) {
   const [sellFlash, setSellFlash] = useState<string | null>(null);
   const [packOpenCards, setPackOpenCards] = useState<Card[] | null>(null);
 
-  // Shop inventory: 6 random cards (stable per session)
+  // Shop inventory: 6 random cards with mods (stable per session)
   const inventory = useMemo(() => {
     const pool = shuffle([...CARDS]);
-    return pool.slice(0, 6);
+    return pool.slice(0, 6).map((c) => {
+      const modCount = Math.random() < 0.3 ? 2 : 1;
+      return generateModdedCard(c, modCount);
+    });
   }, []);
 
   const handleBuy = (card: Card) => {
@@ -68,7 +72,11 @@ export default function Shop({ onClose }: ShopProps) {
     if (PACK_PRICE > 0 && credits < PACK_PRICE) return;
     const ok = PACK_PRICE === 0 ? true : spendCredits(PACK_PRICE);
     if (ok) {
-      const pack = shuffle([...CARDS]).slice(0, PACK_SIZE);
+      // Each pack card gets 1-2 random mods (dealer-quality goods)
+      const pack = shuffle([...CARDS]).slice(0, PACK_SIZE).map((c) => {
+        const modCount = Math.random() < 0.4 ? 2 : 1;
+        return generateModdedCard(c, modCount);
+      });
       for (const c of pack) addToCollection(c);
       useGameStore.getState().saveGame();
       setPackOpenCards(pack);

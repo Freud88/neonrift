@@ -32,13 +32,17 @@ export function useExploration(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   defeatedEnemies: string[],
   callbacks: ExplorationCallbacks,
-  joystick: { x: number; y: number }   // normalized -1..1 from virtual joystick
+  joystick: { x: number; y: number },   // normalized -1..1 from virtual joystick
+  isActive: boolean = true              // false when hidden behind battle/shop screens
 ) {
   const engineRef   = useRef<MapEngine | null>(null);
   const entitiesRef = useRef<SpriteEntity[]>([]);
   const keysRef     = useRef<Set<string>>(new Set());
   const rafRef      = useRef<number>(0);
   const lastInteraction = useRef<number>(0);
+  const isActiveRef = useRef<boolean>(isActive);
+  // Keep ref in sync with prop (readable inside RAF loop without closure issues)
+  isActiveRef.current = isActive;
   // Prevent re-triggering contacts for 5 s after a battle/interaction starts
   const CONTACT_COOLDOWN = 5000;
 
@@ -253,7 +257,14 @@ export function useExploration(
         }
       }
 
-      // ── Collision detection ───────────────────────────────────────────────
+      // ── Collision detection (skip when screen is not active) ─────────────
+      if (!isActiveRef.current) {
+        engine.updateCamera(player.x, player.y);
+        engine.render(entities);
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       const now = Date.now();
 
       for (const e of entities) {
