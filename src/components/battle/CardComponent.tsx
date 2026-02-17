@@ -282,56 +282,81 @@ export default function CardComponent({
             />
 
             {/* Layer 3: Text content above frame */}
-            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              {/* Top row: cost + type */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 4px 0' }}>
-                <span style={{
-                  fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize + 1, fontWeight: 700,
-                  color: ec.primary, background: 'rgba(0,0,0,0.65)', borderRadius: 2, padding: '0 3px',
-                  minWidth: 14, textAlign: 'center',
-                }}>
-                  {card.cost}
-                </span>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize - 1, color: ec.primary, opacity: 0.8 }}>
-                  {TYPE_LABEL[card.type]}
-                </span>
-              </div>
+            {/* Name in the frame's top name bar (7.2%–14.6% from top) */}
+            <div style={{
+              position: 'absolute', zIndex: 3,
+              top: `${h * 0.072}px`, height: `${h * 0.074}px`,
+              left: `${w * 0.08}px`, right: `${w * 0.08}px`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: fontSize,
+                fontWeight: 700,
+                color: '#1a1005',
+                textAlign: 'center',
+                lineHeight: 1,
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+                maxWidth: '100%',
+              }}>
+                {card.name}
+              </span>
+            </div>
 
-              <div style={{ flex: 1 }} />
+            {/* Cost badge top-left */}
+            <div style={{
+              position: 'absolute', zIndex: 3,
+              top: 3, left: 4,
+            }}>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize + 1, fontWeight: 700,
+                color: ec.primary, background: 'rgba(0,0,0,0.7)', borderRadius: 2, padding: '0 3px',
+              }}>
+                {card.cost}
+              </span>
+            </div>
 
-              {/* Bottom: name + stats */}
-              <div style={{ padding: '2px 4px 3px', background: 'linear-gradient(transparent, rgba(0,0,0,0.8))' }}>
-                <div style={{
-                  fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize, fontWeight: 700,
-                  color: '#e0e0ff', textAlign: 'center', lineHeight: 1.1,
-                  textShadow: `0 0 4px ${ec.primary}`, marginBottom: 1,
-                }}>
-                  {card.name}
-                </div>
+            {/* Type badge top-right */}
+            <div style={{
+              position: 'absolute', zIndex: 3,
+              top: 4, right: 4,
+            }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize - 1, color: ec.primary, opacity: 0.85 }}>
+                {TYPE_LABEL[card.type]}
+              </span>
+            </div>
 
-                {isAgent && atk !== undefined && def !== undefined ? (
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <span style={{
-                      fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize + 0.5,
-                      color: buffed ? '#39ff14' : '#e0e0ff', fontWeight: 700,
-                    }}>
-                      ⚔{atk} <span style={{ color: '#6666aa' }}>|</span> 🛡{def}
-                    </span>
-                  </div>
-                ) : size !== 'mini' ? (
-                  <p style={{
-                    fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize - 0.5,
-                    color: '#8888aa', lineHeight: 1.2, overflow: 'hidden',
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            {/* Stats / description at bottom */}
+            <div style={{
+              position: 'absolute', zIndex: 3,
+              bottom: 4, left: 4, right: 4,
+            }}>
+              {isAgent && atk !== undefined && def !== undefined ? (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+                  <span style={{
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize + 0.5,
+                    color: buffed ? '#39ff14' : '#e0e0ff', fontWeight: 700,
+                    textShadow: '0 1px 3px rgba(0,0,0,0.9)',
                   }}>
-                    {card.description}
-                  </p>
-                ) : null}
-              </div>
+                    ⚔{atk} <span style={{ color: '#6666aa' }}>|</span> 🛡{def}
+                  </span>
+                </div>
+              ) : size !== 'mini' ? (
+                <p style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: fontSize - 0.5,
+                  color: '#ccccee', lineHeight: 1.2, overflow: 'hidden',
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                  textShadow: '0 1px 3px rgba(0,0,0,0.9)', margin: 0,
+                }}>
+                  {card.description}
+                </p>
+              ) : null}
 
               {/* Mod dot indicators */}
               {modSlots > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 2, padding: '1px 0 2px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 1 }}>
                   {Array.from({ length: modSlots }).map((_, i) => (
                     <div key={i} style={{
                       width: 4, height: 4, borderRadius: 1,
