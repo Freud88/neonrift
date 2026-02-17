@@ -51,7 +51,8 @@ export default function Shop({ onClose }: ShopProps) {
   const inventory = useMemo(() => {
     const pool = shuffle([...CARDS]);
     return pool.slice(0, 6).map((c) => {
-      const modCount = Math.random() < 0.3 ? 2 : 1;
+      const r = Math.random();
+      const modCount = r < 0.03 ? 4 : r < 0.12 ? 3 : r < 0.35 ? 2 : 1;
       return generateModdedCard(c, modCount);
     });
   }, []);
@@ -74,7 +75,8 @@ export default function Shop({ onClose }: ShopProps) {
     if (ok) {
       // Each pack card gets 1-2 random mods (dealer-quality goods)
       const pack = shuffle([...CARDS]).slice(0, PACK_SIZE).map((c) => {
-        const modCount = Math.random() < 0.4 ? 2 : 1;
+        const r = Math.random();
+        const modCount = r < 0.05 ? 4 : r < 0.18 ? 3 : r < 0.45 ? 2 : 1;
         return generateModdedCard(c, modCount);
       });
       for (const c of pack) addToCollection(c);
