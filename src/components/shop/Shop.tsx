@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CARDS } from '@/data/cards';
@@ -73,6 +73,29 @@ export default function Shop({ onClose }: ShopProps) {
   const [sellFlash, setSellFlash] = useState<string | null>(null);
   const [packOpenCards, setPackOpenCards] = useState<Card[] | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Auto-refresh triggers: level-up, rift complete, rift fail
+  const playerLevel     = gameState?.player.level ?? 1;
+  const zonesCompleted  = gameState?.progress.zonesCompleted ?? 0;
+  const totalLosses     = gameState?.progress.totalLosses ?? 0;
+  const prevLevel       = useRef(playerLevel);
+  const prevZones       = useRef(zonesCompleted);
+  const prevLosses      = useRef(totalLosses);
+  // Skip on first mount (values are equal to initial refs)
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    const levelled  = playerLevel    > prevLevel.current;
+    const riftDone  = zonesCompleted > prevZones.current;
+    const riftFail  = totalLosses    > prevLosses.current;
+    if (levelled || riftDone || riftFail) {
+      setRefreshKey((k) => k + 1);
+    }
+    prevLevel.current  = playerLevel;
+    prevZones.current  = zonesCompleted;
+    prevLosses.current = totalLosses;
+  }, [playerLevel, zonesCompleted, totalLosses]);
 
   // Shop inventory: refreshes when refreshKey changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,7 +246,7 @@ export default function Shop({ onClose }: ShopProps) {
             {/* Singles header + refresh */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', letterSpacing: '0.1em' }}>
-                SINGLES — inventory refreshes each visit
+                SINGLES — refreshes on level-up, rift clear or rift fail
               </p>
               <button
                 onClick={handleRefresh}

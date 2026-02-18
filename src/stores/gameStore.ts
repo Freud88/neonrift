@@ -7,6 +7,19 @@ import type { ZoneState, ZoneConfig, BiomeId } from '@/types/zone';
 import { STARTER_DECK } from '@/data/cards';
 import { migrateOldTier } from '@/utils/tierUtils';
 
+// ── XP / Level helpers ────────────────────────────────────────────────────────
+/** XP needed to reach level N (cumulative). Level 1 = 0 XP. */
+function xpForLevel(level: number): number {
+  return level <= 1 ? 0 : (level - 1) * 100;
+}
+
+/** Compute the player level from total XP earned. */
+export function levelFromXp(xp: number): number {
+  let lvl = 1;
+  while (xpForLevel(lvl + 1) <= xp) lvl++;
+  return lvl;
+}
+
 // ── Zone helpers ──────────────────────────────────────────────────────────────
 const BIOME_ORDER: BiomeId[] = [
   'neon_streets', 'industrial_wasteland', 'data_swamp',
@@ -250,13 +263,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   defeatEnemy: (enemyId, credits, xp) => {
     set((state) => {
       if (!state.gameState) return state;
+      const newXp = state.gameState.player.xp + xp;
+      const newLevel = levelFromXp(newXp);
       return {
         gameState: {
           ...state.gameState,
           player: {
             ...state.gameState.player,
             credits: state.gameState.player.credits + credits,
-            xp: state.gameState.player.xp + xp,
+            xp: newXp,
+            level: newLevel,
           },
           progress: {
             ...state.gameState.progress,
