@@ -64,6 +64,18 @@ function getRecurseChance(card: CardInPlay): number {
   return 0;
 }
 
+// Returns shield bonus for agents entering the field
+function getShieldValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'shield_1') return 1;
+    if (sp === 'shield_2') return 2;
+    if (sp === 'shield_3') return 3;
+  }
+  return 0;
+}
+
 // Returns amp bonus for scripts
 function getAmpBonus(card: CardInPlay): number {
   for (const applied of card.card.mods?.mods ?? []) {
@@ -302,6 +314,12 @@ export class BattleEngine {
         inPlay.stealthTurns = 1;
       }
       combatant.field.push(inPlay);
+      // Augmented mod: bonus defense on entry
+      const shieldBonus = getShieldValue(inPlay);
+      if (shieldBonus > 0) {
+        inPlay.currentDefense += shieldBonus;
+        this._log(`${inPlay.card.name} enters with +${shieldBonus} Shield`);
+      }
       // Entry effects
       this._resolveEntryEffect(inPlay, combatant, opponent, targetInstanceId);
       this._log(`${side} plays Agent: ${inPlay.card.name}`);

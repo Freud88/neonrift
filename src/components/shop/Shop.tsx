@@ -507,9 +507,9 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         break;
       }
       case 'architects_key': {
-        const bossMods = MODS.filter((m) => m.isBossMod);
+        const bossMods = MODS.filter((m) => m.isBossMod && m.applicableTo.includes(selectedCard.type));
         const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
-        if (!pick) { msg = 'No boss mods available!'; setResult({ msg }); return; }
+        if (!pick) { msg = 'No compatible boss mods for this card type!'; setResult({ msg }); return; }
         const existing = selectedCard.mods?.mods ?? [];
         if (existing.length >= 6) { msg = 'Card already has 6 mods (maximum)!'; setResult({ msg }); return; }
         const combinedMods = [...existing, { modId: pick.id, tier: 2 as const }];

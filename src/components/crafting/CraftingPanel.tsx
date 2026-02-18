@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CRAFTING_ITEMS } from '@/data/craftingItems';
@@ -17,45 +17,65 @@ interface CraftingPanelProps {
 
 export default function CraftingPanel({ onClose }: CraftingPanelProps) {
   const { gameState, removeCraftingItem } = useGameStore();
-  const [selectedItem, setSelectedItem]   = useState<CraftingItemId | null>(null);
-  const [selectedCard, setSelectedCard]   = useState<Card | null>(null);
-  const [result, setResult]               = useState<string | null>(null);
-  const [resultCard, setResultCard]       = useState<Card | null>(null);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [activeItem, setActiveItem] = useState<CraftingItemId | null>(null);
+  const [flashMsg, setFlashMsg] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inventory = gameState?.inventory ?? [];
   const collection = gameState?.collection ?? [];
 
-  const itemDef = selectedItem ? CRAFTING_ITEMS[selectedItem] : null;
+  // Keep selectedCard in sync with collection (after modifications)
+  useEffect(() => {
+    if (selectedCard) {
+      const updated = collection.find((c) => c.id === selectedCard.id);
+      if (updated) setSelectedCard(updated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collection]);
 
-  // ── Apply crafting item to selected card ────────────────────────────────────
+  const showFlash = useCallback((msg: string) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlashMsg(msg);
+    flashTimer.current = setTimeout(() => setFlashMsg(null), 2500);
+  }, []);
 
-  const handleCraft = useCallback(() => {
-    if (!selectedItem || !selectedCard || !gameState) return;
+  // ── Apply crafting item to selected card ───────────────────────────────────
 
-    const consumed = removeCraftingItem(selectedItem);
-    if (!consumed) return;
+  const applyCraft = useCallback(() => {
+    if (!activeItem || !selectedCard || !gameState) return;
+
+    const consumed = removeCraftingItem(activeItem);
+    if (!consumed) { showFlash('No items left!'); return; }
 
     let newCard: Card = selectedCard;
     let msg = '';
 
-    switch (selectedItem) {
+    switch (activeItem) {
       case 'data_fragment': {
-        // Add 1 random mod to the card
-        const currentMods = selectedCard.mods?.mods ?? [];
-        const newCount = Math.min(4, currentMods.length + 1);
-        newCard = generateModdedCard(
-          { ...selectedCard, mods: undefined },
-          newCount
-        );
-        // Preserve existing mods and append
-        const existingMods = currentMods.slice(0, currentMods.length);
-        const freshMods = newCard.mods?.mods ?? [];
-        const addedMod = freshMods[freshMods.length - 1];
-        if (addedMod) {
-          const allMods = [...existingMods, addedMod];
-          newCard = generateModdedCard({ ...selectedCard, mods: undefined }, allMods.length);
+        const existing = selectedCard.mods?.mods ?? [];
+        if (existing.length >= 6) {
+          msg = 'Card already has 6 mods (maximum)!';
+          showFlash(msg);
+          return;
         }
-        msg = `Added a new mod to ${newCard.mods?.displayName ?? newCard.name}`;
+        const base = { ...selectedCard, mods: undefined };
+        const withExtra = generateModdedCard(base, existing.length + 1);
+        const allNewMods = withExtra.mods?.mods ?? [];
+        const newMod = allNewMods[allNewMods.length - 1];
+        if (!newMod) { showFlash('Failed to generate mod.'); return; }
+        const combinedMods = [...existing, newMod];
+        newCard = {
+          ...selectedCard,
+          mods: {
+            mods: combinedMods,
+            modRarity: rarityFromModCount(combinedMods.length),
+            displayName: selectedCard.mods?.displayName ?? selectedCard.name,
+            locked: selectedCard.mods?.locked ?? [],
+          },
+        };
+        const modName = MOD_MAP[newMod.modId]?.name ?? newMod.modId;
+        msg = `Added mod: ${modName}`;
         break;
       }
       case 'wipe_drive': {
@@ -66,70 +86,53 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
       case 'recompiler': {
         const count = selectedCard.mods?.mods.length ?? 1;
         newCard = generateModdedCard({ ...selectedCard, mods: undefined }, count);
-        msg = `Re-rolled mods on ${newCard.mods?.displayName ?? newCard.name}`;
+        msg = `Re-rolled ${count} mod${count > 1 ? 's' : ''}`;
         break;
       }
       case 'tier_boost': {
         if (!selectedCard.mods || selectedCard.mods.mods.length === 0) {
-          msg = 'No mods to upgrade!';
-          setResult(msg);
-          return;
+          showFlash('No mods to upgrade!'); return;
         }
-        // Upgrade the lowest-tier mod (tier 3 → tier 2 → tier 1)
         const mods = [...selectedCard.mods.mods];
-        const idx = mods.reduce((best, m, i) =>
-          mods[i].tier > mods[best].tier ? i : best, 0);
-        mods[idx] = { ...mods[idx], tier: Math.max(1, mods[idx].tier - 1) as 1 | 2 | 3 };
-        newCard = {
-          ...selectedCard,
-          mods: { ...selectedCard.mods, mods },
-        };
-        const modName = MOD_MAP[mods[idx].modId]?.name ?? mods[idx].modId;
-        msg = `Upgraded ${modName} to Tier ${mods[idx].tier}`;
+        const locked = selectedCard.mods.locked;
+        const idx = mods.reduce((best, m, i) => {
+          if (locked.includes(m.modId)) return best;
+          return mods[i].tier > mods[best].tier ? i : best;
+        }, 0);
+        if (mods[idx].tier === 1) { showFlash('All mods already at T1!'); return; }
+        mods[idx] = { ...mods[idx], tier: (mods[idx].tier - 1) as 1 | 2 | 3 };
+        newCard = { ...selectedCard, mods: { ...selectedCard.mods, mods } };
+        msg = `Upgraded ${MOD_MAP[mods[idx].modId]?.name ?? ''} to T${mods[idx].tier}`;
         break;
       }
       case 'quantum_lock': {
         if (!selectedCard.mods || selectedCard.mods.mods.length === 0) {
-          msg = 'No mods to lock!';
-          setResult(msg);
-          return;
+          showFlash('No mods to lock!'); return;
         }
-        // Lock a random unlocked mod
         const unlocked = selectedCard.mods.mods.filter(
           (m) => !selectedCard.mods!.locked.includes(m.modId)
         );
-        if (unlocked.length === 0) {
-          msg = 'All mods are already locked!';
-          setResult(msg);
-          return;
-        }
+        if (unlocked.length === 0) { showFlash('All mods already locked!'); return; }
         const target = unlocked[Math.floor(Math.random() * unlocked.length)];
         newCard = {
           ...selectedCard,
-          mods: {
-            ...selectedCard.mods,
-            locked: [...selectedCard.mods.locked, target.modId],
-          },
+          mods: { ...selectedCard.mods, locked: [...selectedCard.mods.locked, target.modId] },
         };
-        msg = `Locked mod: ${MOD_MAP[target.modId]?.name ?? target.modId}`;
+        msg = `Locked: ${MOD_MAP[target.modId]?.name ?? target.modId}`;
         break;
       }
       case 'architects_key': {
-        // Add a random boss mod
-        const bossMods = MODS.filter((m) => m.isBossMod);
+        const bossMods = MODS.filter((m) => m.isBossMod && m.applicableTo.includes(selectedCard.type));
         const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
-        if (!pick) { msg = 'No boss mods available!'; setResult(msg); return; }
-        const existingMods = selectedCard.mods?.mods ?? [];
-        if (existingMods.length >= 4) {
-          msg = 'Card already has 4 mods — use Wipe Drive first!';
-          setResult(msg);
-          return;
-        }
+        if (!pick) { showFlash('No compatible boss mods for this card type!'); return; }
+        const existing = selectedCard.mods?.mods ?? [];
+        if (existing.length >= 6) { showFlash('Card already has 6 mods (maximum)!'); return; }
+        const combinedMods = [...existing, { modId: pick.id, tier: 2 as const }];
         newCard = {
           ...selectedCard,
           mods: {
-            mods: [...existingMods, { modId: pick.id, tier: 2 }],
-            modRarity: rarityFromModCount(existingMods.length + 1),
+            mods: combinedMods,
+            modRarity: rarityFromModCount(combinedMods.length),
             displayName: selectedCard.mods?.displayName ?? selectedCard.name,
             locked: selectedCard.mods?.locked ?? [],
           },
@@ -154,157 +157,294 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
       };
     });
     useGameStore.getState().saveGame();
+    setSelectedCard(newCard);
+    showFlash(msg);
+  }, [activeItem, selectedCard, gameState, removeCraftingItem, showFlash]);
 
-    setResultCard(newCard);
-    setResult(msg);
-    setSelectedCard(null);
-  }, [selectedItem, selectedCard, gameState, removeCraftingItem]);
+  // ── Card click handler (applies selected item) ────────────────────────────
 
-  const reset = () => {
-    setResult(null);
-    setResultCard(null);
-    setSelectedCard(null);
-  };
+  const handleCardClick = useCallback(() => {
+    if (!activeItem) {
+      showFlash('Right-click an item first!');
+      return;
+    }
+    applyCraft();
+  }, [activeItem, applyCraft, showFlash]);
+
+  // ── Item context menu (right-click to select) ────────────────────────────
+
+  const handleItemRightClick = useCallback((e: React.MouseEvent, itemId: CraftingItemId) => {
+    e.preventDefault();
+    setActiveItem((prev) => prev === itemId ? null : itemId);
+  }, []);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  // Phase 1: Card selection
+  if (!selectedCard) {
+    return (
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'rgba(5,5,20,0.97)',
+        display: 'flex', flexDirection: 'column',
+        fontFamily: 'JetBrains Mono, monospace',
+        zIndex: 40,
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '12px 16px',
+          borderBottom: '1px solid rgba(0,240,255,0.2)',
+          flexShrink: 0,
+        }}>
+          <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: '#00f0ff', letterSpacing: '0.2em' }}>
+            CRAFTING TERMINAL
+          </p>
+          <NeonButton variant="ghost" size="sm" onClick={onClose}>✕ CLOSE</NeonButton>
+        </div>
+
+        <div style={{ padding: '12px 16px', flexShrink: 0 }}>
+          <p style={{ fontSize: 10, color: '#6666aa', letterSpacing: '0.15em' }}>
+            SELECT A CARD TO MODIFY
+          </p>
+        </div>
+
+        {/* Card grid */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {collection.length === 0 && (
+              <p style={{ fontSize: 11, color: '#444466', padding: 20 }}>
+                No cards in collection. Win some battles first!
+              </p>
+            )}
+            {collection.map((card, i) => (
+              <motion.div
+                key={card.id + i + (card.mods?.displayName ?? '')}
+                whileHover={{ y: -6, scale: 1.02 }}
+                onClick={() => setSelectedCard(card)}
+                style={{ cursor: 'pointer', borderRadius: 4 }}
+              >
+                <CardComponent card={card} size="hand" selected={false} />
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase 2: Card detail + items sidebar
+  const activeItemDef = activeItem ? CRAFTING_ITEMS[activeItem] : null;
 
   return (
     <div style={{
       position: 'absolute', inset: 0,
       background: 'rgba(5,5,20,0.97)',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center',
       fontFamily: 'JetBrains Mono, monospace',
       zIndex: 40,
-      overflowY: 'auto',
-      padding: '20px 16px',
+      overflow: 'hidden',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: 700, marginBottom: 16 }}>
-        <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 18, color: '#00f0ff', letterSpacing: '0.2em' }}>
-          CRAFTING TERMINAL
-        </p>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px',
+        borderBottom: '1px solid rgba(0,240,255,0.2)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => { setSelectedCard(null); setActiveItem(null); }}
+            style={{
+              background: 'transparent', border: '1px solid rgba(0,240,255,0.3)',
+              color: '#00f0ff', fontSize: 10, padding: '4px 10px',
+              cursor: 'pointer', letterSpacing: '0.1em',
+            }}
+          >
+            ← BACK
+          </button>
+          <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 14, color: '#00f0ff', letterSpacing: '0.15em' }}>
+            MODDING: {selectedCard.mods?.displayName ?? selectedCard.name}
+          </p>
+        </div>
         <NeonButton variant="ghost" size="sm" onClick={onClose}>✕ CLOSE</NeonButton>
       </div>
 
-      {/* Result banner */}
-      <AnimatePresence>
-        {result && (
+      {/* Main content: card + items */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Left: Card display */}
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+          position: 'relative',
+        }}>
+          {/* Flash message */}
+          <AnimatePresence>
+            {flashMsg && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                style={{
+                  position: 'absolute', top: 16,
+                  padding: '8px 20px',
+                  background: 'rgba(0,240,255,0.1)',
+                  border: '1px solid rgba(0,240,255,0.4)',
+                  color: '#00f0ff',
+                  fontSize: 11,
+                  letterSpacing: '0.05em',
+                  zIndex: 5,
+                }}
+              >
+                {flashMsg}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Instruction */}
+          {activeItem ? (
+            <p style={{
+              fontSize: 9, color: activeItemDef?.color ?? '#6666aa',
+              letterSpacing: '0.15em', marginBottom: 16, textAlign: 'center',
+            }}>
+              {activeItemDef?.icon} {activeItemDef?.name?.toUpperCase()} SELECTED — CLICK CARD TO APPLY
+            </p>
+          ) : (
+            <p style={{ fontSize: 9, color: '#444466', letterSpacing: '0.15em', marginBottom: 16 }}>
+              RIGHT-CLICK AN ITEM ON THE RIGHT → THEN CLICK THIS CARD
+            </p>
+          )}
+
+          {/* The card */}
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
+            whileHover={activeItem ? { scale: 1.05 } : {}}
+            onClick={handleCardClick}
             style={{
-              marginBottom: 16,
-              padding: '10px 20px',
-              border: '1px solid #00f0ff',
-              color: '#00f0ff',
-              fontSize: 12,
-              textAlign: 'center',
-              maxWidth: 700,
-              width: '100%',
+              cursor: activeItem ? 'pointer' : 'default',
+              borderRadius: 6,
+              outline: activeItem
+                ? `2px solid ${activeItemDef?.color ?? '#00f0ff'}`
+                : 'none',
+              outlineOffset: 6,
             }}
           >
-            {result}
-            {resultCard && (
-              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                <CardComponent card={resultCard} size="hand" selected={false} />
-              </div>
-            )}
-            <div style={{ marginTop: 10 }}>
-              <NeonButton variant="cyan" size="sm" onClick={reset}>CONTINUE</NeonButton>
-            </div>
+            <CardComponent card={selectedCard} size="preview" selected={false} />
           </motion.div>
-        )}
-      </AnimatePresence>
 
-      {!result && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: 700 }}>
-          {/* Step 1: Choose item */}
-          <div>
-            <p style={{ fontSize: 9, color: '#6666aa', letterSpacing: '0.15em', marginBottom: 8 }}>
-              1. SELECT CRAFTING ITEM
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {inventory.length === 0 && (
-                <p style={{ fontSize: 11, color: '#444466' }}>No crafting items in inventory. Defeat enemies to find them!</p>
-              )}
-              {inventory.map(({ id, quantity }) => {
-                const def = CRAFTING_ITEMS[id];
-                const active = selectedItem === id;
+          {/* Mod list below card */}
+          {selectedCard.mods && selectedCard.mods.mods.length > 0 && (
+            <div style={{ marginTop: 16, maxWidth: 280 }}>
+              <p style={{ fontSize: 8, color: '#444466', letterSpacing: '0.15em', marginBottom: 6 }}>
+                ACTIVE MODS
+              </p>
+              {selectedCard.mods.mods.map((m, i) => {
+                const mod = MOD_MAP[m.modId];
+                const isLocked = selectedCard.mods!.locked.includes(m.modId);
                 return (
-                  <motion.button
-                    key={id}
-                    whileHover={{ scale: 1.04 }}
-                    onClick={() => { setSelectedItem(active ? null : id); setSelectedCard(null); }}
-                    style={{
-                      background: active ? `rgba(${hexToRgb(def.color)},0.15)` : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${active ? def.color : '#334'}`,
-                      color: active ? def.color : '#8888aa',
-                      padding: '8px 14px',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      borderRadius: 2,
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>{def.icon}</span>
-                    <span>{def.name}</span>
-                    <span style={{ opacity: 0.6, fontSize: 10 }}>×{quantity}</span>
-                  </motion.button>
+                  <div key={m.modId + i} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: 9, color: '#8888aa', marginBottom: 3,
+                  }}>
+                    <span style={{
+                      fontSize: 8, color: '#00f0ff',
+                      background: 'rgba(0,240,255,0.1)',
+                      padding: '1px 4px',
+                    }}>T{m.tier}</span>
+                    <span>{mod?.name ?? m.modId}</span>
+                    <span style={{ opacity: 0.5, fontSize: 8 }}>
+                      {mod?.tiers[m.tier]?.description ?? ''}
+                    </span>
+                    {isLocked && <span style={{ color: '#39ff14', fontSize: 8 }}>🔒</span>}
+                  </div>
                 );
               })}
             </div>
-            {itemDef && (
-              <p style={{ fontSize: 10, color: itemDef.color, marginTop: 6, opacity: 0.8 }}>
-                ⟩ {itemDef.description}
-              </p>
-            )}
-          </div>
-
-          {/* Step 2: Choose card (only if item selected) */}
-          {selectedItem && (
-            <div>
-              <p style={{ fontSize: 9, color: '#6666aa', letterSpacing: '0.15em', marginBottom: 8 }}>
-                2. SELECT A CARD FROM YOUR COLLECTION
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
-                {collection.map((card) => {
-                  const isSelected = selectedCard?.id === card.id;
-                  return (
-                    <motion.div
-                      key={card.id + (card.mods?.displayName ?? '')}
-                      whileHover={{ y: -4 }}
-                      onClick={() => setSelectedCard(isSelected ? null : card)}
-                      style={{
-                        cursor: 'pointer',
-                        outline: isSelected ? '2px solid #00f0ff' : 'none',
-                        outlineOffset: 3,
-                        borderRadius: 4,
-                      }}
-                    >
-                      <CardComponent card={card} size="hand" selected={isSelected} />
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Craft button */}
-          {selectedItem && selectedCard && (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <NeonButton
-                variant="cyan"
-                size="lg"
-                onClick={handleCraft}
-              >
-                ⚡ APPLY {CRAFTING_ITEMS[selectedItem].name.toUpperCase()}
-              </NeonButton>
-            </div>
           )}
         </div>
-      )}
+
+        {/* Right: Items sidebar */}
+        <div style={{
+          width: 240,
+          borderLeft: '1px solid rgba(0,240,255,0.15)',
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '10px 12px',
+            borderBottom: '1px solid rgba(0,240,255,0.1)',
+          }}>
+            <p style={{ fontSize: 9, color: '#6666aa', letterSpacing: '0.15em' }}>
+              CRAFTING ITEMS
+            </p>
+            <p style={{ fontSize: 8, color: '#444466', marginTop: 2 }}>
+              Right-click to select
+            </p>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+            {inventory.length === 0 && (
+              <p style={{ fontSize: 10, color: '#333355', padding: '12px 4px' }}>
+                No crafting items. Defeat enemies to find them!
+              </p>
+            )}
+            {inventory.map(({ id, quantity }) => {
+              const def = CRAFTING_ITEMS[id];
+              const isActive = activeItem === id;
+              return (
+                <motion.button
+                  key={id}
+                  whileHover={{ x: -2 }}
+                  onContextMenu={(e) => handleItemRightClick(e, id)}
+                  onClick={(e) => { e.preventDefault(); handleItemRightClick(e, id); }}
+                  style={{
+                    width: '100%',
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                    padding: '8px 10px',
+                    marginBottom: 4,
+                    background: isActive
+                      ? `rgba(${hexToRgb(def.color)},0.15)`
+                      : 'rgba(255,255,255,0.02)',
+                    border: isActive
+                      ? `1px solid ${def.color}`
+                      : '1px solid rgba(255,255,255,0.06)',
+                    color: isActive ? def.color : '#8888aa',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    borderRadius: 3,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>{def.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: 10, fontWeight: 600,
+                    }}>
+                      <span>{def.name}</span>
+                      <span style={{ opacity: 0.6, fontSize: 9 }}>×{quantity}</span>
+                    </div>
+                    <div style={{ fontSize: 8, opacity: 0.6, marginTop: 2, lineHeight: 1.3 }}>
+                      {def.description}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <div style={{
+                      fontSize: 7, color: def.color,
+                      letterSpacing: '0.1em',
+                      whiteSpace: 'nowrap',
+                      marginTop: 1,
+                    }}>
+                      ▶ ARMED
+                    </div>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
