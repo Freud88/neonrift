@@ -297,7 +297,7 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
     return (
       <div style={{
         position: 'absolute', inset: 0,
-        background: 'rgba(5,5,20,0.97)',
+        background: '#070710',
         display: 'flex', flexDirection: 'column',
         fontFamily: 'JetBrains Mono, monospace',
         zIndex: 40,
@@ -406,7 +406,7 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
   return (
     <div style={{
       position: 'absolute', inset: 0,
-      background: 'rgba(5,5,20,0.97)',
+      background: '#070710',
       display: 'flex', flexDirection: 'column',
       fontFamily: 'JetBrains Mono, monospace',
       zIndex: 40,
