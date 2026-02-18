@@ -173,6 +173,25 @@ function CardFrame({
       }}>
         {cardMods && modSlots > 0 ? (
           <>
+            {/* Base effect description for non-agent cards (scripts, malware, traps) */}
+            {!isAgent && (card.effect?.description ?? card.description) && (
+              <p style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: Math.max(fontSize - 1, 5.5),
+                color: '#aaaacc',
+                lineHeight: 1.3,
+                margin: 0,
+                marginBottom: 2,
+                flexShrink: 0,
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+              }}>
+                {card.effect?.description ?? card.description}
+              </p>
+            )}
+
             {/* Rarity label */}
             <div style={{
               fontFamily: 'JetBrains Mono, monospace',
