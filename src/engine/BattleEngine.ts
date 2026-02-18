@@ -451,6 +451,65 @@ export class BattleEngine {
       }
     }
 
+    // ── Per-turn malware effects ────────────────────────────────────────────────
+    const opp = combatant === this.state.player ? this.state.enemy : this.state.player;
+    for (const m of [...combatant.field]) {
+      if (m.card.type !== 'malware') continue;
+      const mEffect = m.card.effect;
+      if (!mEffect) continue;
+
+      // Rust Protocol: each turn apply Armor 1 to all ally agents
+      if (m.card.id === 'rust_rust_protocol') {
+        for (const a of combatant.field) {
+          if (a.card.type === 'agent') {
+            // Grant temporary Armor 1 by patching keywords (idempotent — only add if missing)
+            const hasArmor = a.card.keywords?.some((k) => k.keyword === 'armor');
+            if (!hasArmor) {
+              a.card = { ...a.card, keywords: [...(a.card.keywords ?? []), { keyword: 'armor', value: 1 }] };
+            }
+          }
+        }
+        if (isPlayer) this._log(`Rust Protocol aura: all allies gain Armor 1`);
+
+        // Reduce malware HP by 1 per turn (duration decay)
+        m.currentDefense--;
+        if (m.currentDefense <= 0) {
+          // Expiry effect: all allies regenerate 2 DEF
+          for (const a of combatant.field) {
+            if (a.card.type === 'agent') {
+              a.currentDefense += 2;
+              if (isPlayer) this._log(`${a.card.name} regenerates 2 DEF (Rust Protocol expired)`);
+            }
+          }
+          // Remove the malware
+          const fi = combatant.field.findIndex((c) => c.instanceId === m.instanceId);
+          if (fi !== -1) { combatant.field.splice(fi, 1); combatant.discard.push(m.card); }
+          if (isPlayer) this._log(`Rust Protocol expired`);
+        }
+      }
+
+      // Virus Injector: each turn deal 1 damage to all enemy agents; kills extend duration
+      if (m.card.id === 'synth_virus_injector') {
+        const dmgVal = mEffect.value ?? 1;
+        let kills = 0;
+        const beforeCount = opp.field.filter(c => c.card.type === 'agent').length;
+        for (const t of [...opp.field]) {
+          if (t.card.type === 'agent') this._dealDamageToAgent(t, opp, dmgVal);
+        }
+        const afterCount = opp.field.filter(c => c.card.type === 'agent').length;
+        kills = beforeCount - afterCount;
+        if (isPlayer) this._log(`Virus Injector: 1 dmg to all enemies${kills > 0 ? ` (+${kills} duration)` : ''}`);
+
+        // Reduce malware HP by 1 per turn, but extend by kills
+        m.currentDefense = m.currentDefense - 1 + kills;
+        if (m.currentDefense <= 0) {
+          const fi = combatant.field.findIndex((c) => c.instanceId === m.instanceId);
+          if (fi !== -1) { combatant.field.splice(fi, 1); combatant.discard.push(m.card); }
+          if (isPlayer) this._log(`Virus Injector expired`);
+        }
+      }
+    }
+
     // Leaking T10: ally buff (already handled by atkBonus in cardMods at generation)
     // But if the leaking field card has specialValue === -2, buff other allies' ATK by 1
     for (const c of combatant.field) {
@@ -625,8 +684,10 @@ export class BattleEngine {
         if (drawCount > 0) this._drawCards(combatant, drawCount);
       }
 
-      // Check traps
+      // Check opponent traps: 'on_play_agent' (opponent reacts to enemy playing)
+      // and 'on_enemy_agent' (opponent specifically watches for enemy agent plays)
       this._checkTraps(opponent, inPlay, 'on_play_agent');
+      this._checkTraps(opponent, inPlay, 'on_enemy_agent');
 
     } else if (type === 'script') {
       // Flickering: chance to fizzle (card consumed but no effect)
@@ -661,8 +722,9 @@ export class BattleEngine {
         this._log(`${side} plays Script: ${inPlay.card.name}`);
       }
 
-      // Check opponent traps
+      // Check opponent traps: 'on_play_script' and 'on_enemy_script'
       this._checkTraps(opponent, inPlay, 'on_play_script');
+      this._checkTraps(opponent, inPlay, 'on_enemy_script');
 
     } else if (type === 'malware') {
       combatant.field.push(inPlay);
@@ -774,13 +836,20 @@ export class BattleEngine {
           this._dealScriptDamageToPlayer(inPlay, opponent, dmg);
           totalDamageDealt += dmg;
         }
-      } else if (effect.target === 'all_enemy_agents') {
+      } else if (effect.target === 'all_enemies' || effect.target === 'all_enemy_agents') {
+        const beforeCount = opponent.field.length;
         for (const t of [...opponent.field]) {
           this._dealDamageToAgent(t, opponent, dmg);
           totalDamageDealt += dmg;
           if (corrode.v1 > 0 && t.currentDefense > 0) {
             t.currentDefense = Math.max(0, t.currentDefense - corrode.v1);
           }
+        }
+        // Voltage Spike: draw 1 card for each enemy killed
+        const killed = beforeCount - opponent.field.length;
+        if (killed > 0 && inPlay.card.id === 'cipher_voltage_spike') {
+          this._drawCards(owner, killed);
+          this._log(`Voltage Spike: drew ${killed} card${killed > 1 ? 's' : ''} from kills!`);
         }
       } else if (!targetId) {
         this._dealScriptDamageToPlayer(inPlay, opponent, dmg);
@@ -817,15 +886,31 @@ export class BattleEngine {
       if (inPlay.card.id === 'neutral_supply_crate') {
         owner.currentDataCells = Math.min(owner.maxDataCells, owner.currentDataCells + 1);
       }
-    } else if (effect.type === 'bounce' && targetId) {
-      const idx = opponent.field.findIndex((c) => c.instanceId === targetId);
+    } else if (effect.type === 'bounce') {
+      // Phase Shift: bounce ally agent to hand (target === 'self_agent')
+      // or enemy agent back to their hand
+      const isAlly = effect.target === 'self_agent';
+      const pool = isAlly ? owner : opponent;
+      const idx = targetId
+        ? pool.field.findIndex((c) => c.instanceId === targetId)
+        : pool.field.length > 0 ? 0 : -1;
       if (idx !== -1) {
-        const bounced = opponent.field.splice(idx, 1)[0];
+        const bounced = pool.field.splice(idx, 1)[0];
+        // Trigger on-death effects without actually killing the agent
+        const sp = getSpecialValue(bounced, 'detonate');
+        if (sp > 0) {
+          for (const a of [...opponent.field]) {
+            this._dealDamageToAgent(a, opponent, sp);
+            this._log(`Phase Shift detonation: ${a.card.name} takes ${sp}`);
+          }
+        }
         bounced.currentAttack = bounced.card.attack ?? 0;
         bounced.currentDefense = bounced.card.defense ?? 0;
         bounced.tapped = false;
         bounced.buffs = [];
-        opponent.hand.push(bounced);
+        bounced.summonedThisTurn = false;
+        pool.hand.push(bounced);
+        this._log(`${bounced.card.name} phased back to hand!`);
       }
     } else if (effect.type === 'buff') {
       if (effect.target === 'self' && targetId) {
@@ -1049,8 +1134,9 @@ export class BattleEngine {
   private _checkTraps(
     trapOwner: CombatantState,
     triggeringCard: CardInPlay,
-    trigger: 'on_play_agent' | 'on_play_script'
+    trigger: 'on_play_agent' | 'on_play_script' | 'on_enemy_script' | 'on_enemy_agent' | 'on_ally_death'
   ) {
+    const opponent = trapOwner === this.state.player ? this.state.enemy : this.state.player;
     for (let i = trapOwner.traps.length - 1; i >= 0; i--) {
       const trap = trapOwner.traps[i];
       if (trap.card.triggerCondition !== trigger) continue;
@@ -1065,16 +1151,46 @@ export class BattleEngine {
       const effect = trap.card.effect;
       if (effect) {
         if (effect.type === 'damage') {
-          if (trigger === 'on_play_agent') {
-            this._dealDamageToAgent(triggeringCard,
-              trapOwner === this.state.player ? this.state.enemy : this.state.player,
-              effect.value ?? 0
-            );
+          if (trigger === 'on_ally_death') {
+            // Deadman's Switch-style: use dead agent's ATK as damage
+            const dmg = triggeringCard.currentAttack > 0 ? triggeringCard.currentAttack : (triggeringCard.card.attack ?? 0);
+            const targets2 = opponent.field.filter((c) => c.currentDefense > 0);
+            if (targets2.length > 0) {
+              const t2 = targets2[Math.floor(Math.random() * targets2.length)];
+              this._dealDamageToAgent(t2, opponent, dmg);
+              this._log(`Trap: ${trap.card.name} deals ${dmg} on ally death!`);
+            } else {
+              opponent.health = Math.max(0, opponent.health - dmg);
+              this._log(`Trap: ${trap.card.name} deals ${dmg} to enemy player on ally death!`);
+            }
+          } else if (trigger === 'on_play_agent' || trigger === 'on_enemy_agent') {
+            // Damage the triggering agent
+            this._dealDamageToAgent(triggeringCard, opponent, effect.value ?? 0);
+          } else if (trigger === 'on_play_script' || trigger === 'on_enemy_script') {
+            // Damage the enemy player
+            opponent.health = Math.max(0, opponent.health - (effect.value ?? 0));
+            this._log(`Trap: ${trap.card.name} deals ${effect.value ?? 0} to enemy player!`);
           }
         } else if (effect.type === 'counter') {
-          const opp = trapOwner === this.state.player ? this.state.enemy : this.state.player;
-          opp.discard.pop();
-          this._log(`Trap: ${trap.card.name} countered ${triggeringCard.card.name}!`);
+          // Cancel the triggering card: undo the script effect (remove from discard if it was placed)
+          const di = opponent.discard.indexOf(triggeringCard.card);
+          if (di !== -1) opponent.discard.splice(di, 1);
+          // Place cancelled card in opponent's discard (consumed)
+          opponent.discard.push(triggeringCard.card);
+          // Deal bonus damage to opponent player
+          const bonus = effect.value ?? 2;
+          opponent.health = Math.max(0, opponent.health - bonus);
+          this._log(`Trap: ${trap.card.name} counters ${triggeringCard.card.name} and deals ${bonus} damage!`);
+        } else if (effect.type === 'debuff') {
+          // Data Snare: entering agent gets -2/-2, destroy if DEF ≤ 0
+          const atkPenalty = effect.value ?? 2;
+          const defPenalty = effect.value ?? 2;
+          triggeringCard.currentAttack  = Math.max(0, triggeringCard.currentAttack  - atkPenalty);
+          triggeringCard.currentDefense = Math.max(0, triggeringCard.currentDefense - defPenalty);
+          this._log(`Trap: ${trap.card.name} snares ${triggeringCard.card.name}: -${atkPenalty}/-${defPenalty}`);
+          if (triggeringCard.currentDefense <= 0) {
+            this._dealDamageToAgent(triggeringCard, opponent, 0);
+          }
         }
       }
 
@@ -1633,17 +1749,20 @@ export class BattleEngine {
           this._log(`${target.card.name} refuses to die! (Undying)`);
         }
 
-        // Memory Fragment: passive malware — draw 1 when ally agent dies
+        // Memory Fragment / Neural Web: passive malware — draw 1 when ally agent dies
         for (const m of owner.field) {
-          if (m.card.id === 'synth_memory_fragment' && m !== target) {
+          if ((m.card.id === 'synth_memory_fragment' || m.card.id === 'cipher_neural_web') && m !== target) {
             this._drawCards(owner, 1);
-            this._log(`Memory Fragment: draw 1 (${target.card.name} died)`);
+            this._log(`${m.card.name}: draw 1 (${target.card.name} died)`);
           }
         }
 
-        // Deadman's Switch: trap — deal dead agent's ATK to random enemy
+        // Deadman's Switch / phantom variant: trap — deal dead agent's ATK to random enemy
+        // Also handled generically via _checkTraps(owner, target, 'on_ally_death') below,
+        // but we keep the explicit handler for rust_deadman_switch (legacy) and add phantom variant.
         for (let ti = owner.traps.length - 1; ti >= 0; ti--) {
-          if (owner.traps[ti].card.id === 'rust_deadman_switch') {
+          const tid = owner.traps[ti].card.id;
+          if (tid === 'rust_deadman_switch' || tid === 'phantom_deadmans_switch') {
             const trapCard = owner.traps[ti].card;
             const opp2 = owner === this.state.player ? this.state.enemy : this.state.player;
             const deadAtk = target.card.attack ?? 0;
@@ -1652,10 +1771,10 @@ export class BattleEngine {
               if (targets2.length > 0) {
                 const t2 = targets2[Math.floor(Math.random() * targets2.length)];
                 this._dealDamageToAgent(t2, opp2, deadAtk);
-                this._log(`Deadman's Switch: ${t2.card.name} takes ${deadAtk} damage!`);
+                this._log(`${trapCard.name}: ${t2.card.name} takes ${deadAtk} damage!`);
               } else {
                 opp2.health = Math.max(0, opp2.health - deadAtk);
-                this._log(`Deadman's Switch: ${deadAtk} damage to player!`);
+                this._log(`${trapCard.name}: ${deadAtk} damage to player!`);
               }
             }
             // Consume the trap

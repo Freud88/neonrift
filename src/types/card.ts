@@ -24,7 +24,7 @@ export interface CardMods {
 export interface CardEffect {
   type: 'damage' | 'heal' | 'draw' | 'buff' | 'debuff' | 'bounce' | 'counter' | 'reveal' | 'summon' | 'recall' | 'resurrect' | 'recycle';
   value?: number;
-  target?: 'any' | 'enemy_agent' | 'all_enemy_agents' | 'player' | 'enemy_player' | 'self' | 'all_agents';
+  target?: 'any' | 'enemy_agent' | 'all_enemy_agents' | 'all_enemies' | 'player' | 'enemy_player' | 'enemy' | 'self' | 'self_agent' | 'all_agents';
   description: string;
 }
 
@@ -50,7 +50,7 @@ export interface Card {
   // Script / Malware / Trap
   effect?: CardEffect;
   // Trap trigger condition
-  triggerCondition?: 'on_attack' | 'on_play_agent' | 'on_play_script' | 'on_damage';
+  triggerCondition?: 'on_attack' | 'on_play_agent' | 'on_play_script' | 'on_damage' | 'on_ally_death' | 'on_enemy_script' | 'on_enemy_agent';
   // Mod system (absent on base cards)
   mods?: CardMods;
   /** Random index into the agent art pool, assigned at generation time */

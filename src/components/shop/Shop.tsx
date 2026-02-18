@@ -39,7 +39,7 @@ function sellPrice(card: Card, sellBonus = 0): number {
   return Math.floor(cardBasePrice(card) * (0.3 + sellBonus));
 }
 
-const PACK_PRICE = 0;
+const PACK_PRICE = 100;
 const PACK_SIZE  = 3;
 
 function buildInventory() {
@@ -125,13 +125,17 @@ export default function Shop({ onClose }: ShopProps) {
   };
 
   const handleBuyPack = () => {
-    if (PACK_PRICE > 0 && credits < PACK_PRICE) return;
-    const ok = PACK_PRICE === 0 ? true : spendCredits(PACK_PRICE);
+    if (credits < PACK_PRICE) return;
+    const ok = spendCredits(PACK_PRICE);
     if (ok) {
-      const pack = shuffle([...CARDS]).slice(0, PACK_SIZE).map((c) => {
+      const pool = shuffle([...CARDS]).slice(0, PACK_SIZE);
+      const pack = pool.map((c, i) => {
+        // Guarantee at least 1 Coded (≥2 mods) — first card always gets 2+
         const r = Math.random();
-        const modCount = r < 0.15 ? 6 : r < 0.35 ? 5 : r < 0.60 ? 4 : r < 0.80 ? 3 : 2;
-        return generateModdedCard(c, modCount);
+        const modCount = i === 0
+          ? (r < 0.15 ? 6 : r < 0.35 ? 5 : r < 0.60 ? 4 : r < 0.80 ? 3 : 2)
+          : (r < 0.30 ? 4 : r < 0.65 ? 3 : r < 0.90 ? 2 : 1);
+        return generateModdedCard(c, Math.max(2, modCount));
       });
       for (const c of pack) addToCollection(c);
       useGameStore.getState().saveGame();
@@ -246,35 +250,24 @@ export default function Shop({ onClose }: ShopProps) {
                   GHOST_SIGNAL PACKET
                 </p>
                 <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6666aa' }}>
-                  3 encrypted programs — contents unknown until opened
+                  3 encrypted programs — at least 1 Coded or better
                 </p>
               </div>
               <NeonButton
                 variant="magenta"
                 size="sm"
-                disabled={PACK_PRICE > 0 && credits < PACK_PRICE}
+                disabled={credits < PACK_PRICE}
                 onClick={handleBuyPack}
               >
-                {PACK_PRICE === 0 ? 'FREE' : `¢ ${PACK_PRICE}`}
+                {`¢ ${PACK_PRICE}`}
               </NeonButton>
             </motion.div>
 
-            {/* Singles header + refresh */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            {/* Singles header */}
+            <div style={{ marginBottom: 10 }}>
               <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', letterSpacing: '0.1em' }}>
                 SINGLES — refreshes on level-up, rift clear or rift fail
               </p>
-              <button
-                onClick={handleRefresh}
-                style={{
-                  fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
-                  color: '#00f0ff', background: 'transparent',
-                  border: '1px solid #00f0ff44', borderRadius: 3,
-                  padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.1em',
-                }}
-              >
-                ⟳ REFRESH
-              </button>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>

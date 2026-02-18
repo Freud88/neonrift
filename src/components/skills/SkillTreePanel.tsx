@@ -11,9 +11,25 @@ interface SkillTreePanelProps {
   onClose: () => void;
 }
 
+function xpForLevel(level: number): number {
+  return Math.floor(100 * Math.pow(level, 1.4));
+}
+
+function getExpProgress(xp: number, level: number) {
+  const expForCurrent = xpForLevel(level);
+  const expForNext    = xpForLevel(level + 1);
+  const expNeeded     = expForNext - expForCurrent;
+  const expIntoLevel  = xp - expForCurrent;
+  const percentage    = Math.min(100, Math.max(0, (expIntoLevel / expNeeded) * 100));
+  return { expIntoLevel, expNeeded, expForNext, percentage };
+}
+
 export default function SkillTreePanel({ onClose }: SkillTreePanelProps) {
   const { gameState, allocateSkillPoint } = useGameStore();
   const skills = gameState?.skills ?? { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } };
+  const xp     = gameState?.player.xp ?? 0;
+  const level  = gameState?.player.level ?? 1;
+  const { expIntoLevel, expNeeded, expForNext, percentage } = getExpProgress(xp, level);
 
   const handleAllocate = useCallback((tree: SkillTreeId) => {
     allocateSkillPoint(tree);
@@ -29,16 +45,31 @@ export default function SkillTreePanel({ onClose }: SkillTreePanelProps) {
     >
       {/* Header */}
       <div className="w-full flex items-center justify-between px-6 pt-4 pb-2" style={{ maxWidth: 1200 }}>
-        <div>
+        <div style={{ flex: 1, marginRight: 16 }}>
           <h1
             className="font-display text-xl tracking-widest"
             style={{ color: '#00f0ff', textShadow: '0 0 12px #00f0ff' }}
           >
             SKILL TREES
           </h1>
-          <p className="text-xs mt-1" style={{ color: '#8888cc' }}>
-            Level {gameState?.player.level ?? 1} &mdash; {gameState?.player.xp ?? 0} XP
-          </p>
+          {/* XP Bar */}
+          <div style={{ marginTop: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#6666aa', marginBottom: 4 }}>
+              <span style={{ color: '#00f0ff', fontWeight: 700 }}>Lv.{level}</span>
+              <span>{expIntoLevel} / {expNeeded} XP</span>
+              <span style={{ color: '#6666aa' }}>Lv.{level + 1} — {expForNext} total</span>
+            </div>
+            <div style={{ width: '100%', height: 6, background: 'rgba(40,40,60,0.6)', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(0,240,255,0.1)' }}>
+              <div style={{
+                height: '100%',
+                borderRadius: 4,
+                width: `${percentage}%`,
+                background: 'linear-gradient(90deg, #00f0ff, #c850ff)',
+                boxShadow: '0 0 8px #00f0ff66',
+                transition: 'width 0.5s ease',
+              }} />
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <span
@@ -177,7 +208,7 @@ export default function SkillTreePanel({ onClose }: SkillTreePanelProps) {
                       textShadow: canAllocate ? `0 0 8px ${tree.color}` : 'none',
                     }}
                   >
-                    {currentLevel >= 10 ? 'MAXED' : canAllocate ? 'ALLOCATE POINT' : 'LOCKED'}
+                    {currentLevel >= 10 ? 'MAXED' : canAllocate ? `UNLOCK LV.${currentLevel + 1}` : skills.skillPoints === 0 ? 'NO POINTS' : 'MAX REACHED'}
                   </button>
                 </div>
               </div>
