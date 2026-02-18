@@ -8,6 +8,7 @@ import CardComponent from './CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
 import { ENEMIES } from '@/data/enemies';
 import { CRAFTING_ITEMS } from '@/data/craftingItems';
+import { RIFT_ABILITY_MAP } from '@/data/riftAbilities';
 
 interface BattleRewardsProps {
   result: 'win' | 'lose';
@@ -15,6 +16,7 @@ interface BattleRewardsProps {
   xp: number;
   cardChoices: Card[];
   craftingDrop?: CraftingItem | null;
+  riftEssenceDrop?: { abilityId: string; tier: number } | null;
   enemyProfileId: string;
   onChooseCard: (card: Card | null) => void;
   onContinue: () => void;
@@ -26,6 +28,7 @@ export default function BattleRewards({
   xp,
   cardChoices,
   craftingDrop,
+  riftEssenceDrop,
   enemyProfileId,
   onChooseCard,
   onContinue,
@@ -117,6 +120,26 @@ export default function BattleRewards({
               </div>
             </div>
           );
+        })()}
+        {riftEssenceDrop && (() => {
+          const ability = RIFT_ABILITY_MAP[riftEssenceDrop.abilityId];
+          return ability ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 9, color: '#6666aa', marginBottom: 4 }}>RIFT ESSENCE</div>
+              <div style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#ffd700',
+                textShadow: '0 0 8px #ffd70066',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}>
+                <span style={{ fontSize: 16 }}>{ability.icon}</span>
+                {ability.name} T{riftEssenceDrop.tier}
+              </div>
+            </div>
+          ) : null;
         })()}
       </motion.div>
 

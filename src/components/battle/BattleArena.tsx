@@ -45,12 +45,13 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     engine,
   } = useBattleStore();
 
-  const { gameState, activeZone, defeatEnemy, defeatBoss, incrementLoss, addToCollection, addCraftingItem } = useGameStore();
+  const { gameState, activeZone, defeatEnemy, defeatBoss, incrementLoss, addToCollection, addCraftingItem, addRiftEssence } = useGameStore();
 
   const [mulliganUsed, setMulliganUsed]       = useState(false);
   const [rewardsReady, setRewardsReady]       = useState(false);
   const [rewardCards, setRewardCards]         = useState<Card[]>([]);
   const [craftingDrop, setCraftingDrop]       = useState<CraftingItemId | null>(null);
+  const [riftEssenceDrop, setRiftEssenceDrop] = useState<{ abilityId: string; tier: number } | null>(null);
   const [requiresTarget, setRequiresTarget] = useState(false);
   const pendingFork = battleState?.pendingFork ?? null;
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
@@ -121,6 +122,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
         if (engine && battleState.result === 'win') {
           setRewardCards(engine.getRewardChoices());
           setCraftingDrop(engine.getCraftingDrop());
+          setRiftEssenceDrop(engine.getRiftEssenceDrop());
         }
         setRewardsReady(true);
       }, 800);
@@ -242,13 +244,14 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
       defeatEnemy(enemyId, profile?.rewards.credits ?? 30, profile?.rewards.xpGain ?? 10);
       if (profile?.isBoss) defeatBoss(enemyProfileId);
       if (craftingDrop) addCraftingItem(craftingDrop);
+      if (riftEssenceDrop) addRiftEssence(riftEssenceDrop);
     } else {
       incrementLoss();
     }
 
     clearBattle();
     onBattleEnd(battleState.result as 'win' | 'lose');
-  }, [battleState, enemyId, profile, enemyProfileId, craftingDrop, defeatEnemy, defeatBoss, incrementLoss, addCraftingItem, clearBattle, onBattleEnd]);
+  }, [battleState, enemyId, profile, enemyProfileId, craftingDrop, riftEssenceDrop, defeatEnemy, defeatBoss, incrementLoss, addCraftingItem, addRiftEssence, clearBattle, onBattleEnd]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -526,6 +529,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
           xp={profile?.rewards.xpGain ?? 10}
           cardChoices={rewardCards}
           craftingDrop={craftingDrop ? { id: craftingDrop, quantity: 1 } : null}
+          riftEssenceDrop={riftEssenceDrop}
           enemyProfileId={enemyProfileId}
           onChooseCard={handleChooseCard}
           onContinue={handleContinue}

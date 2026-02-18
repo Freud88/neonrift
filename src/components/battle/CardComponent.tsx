@@ -8,6 +8,7 @@ import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
 import { TIER_COLORS, TIER_NAMES } from '@/utils/tierUtils';
+import { RIFT_ABILITY_MAP } from '@/data/riftAbilities';
 import CardArt from './CardArt';
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
@@ -215,6 +216,26 @@ function CardFrame({
             }}>
               {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
             </div>
+
+            {/* Rift Ability (gold, before mods) */}
+            {cardMods.riftAbility && (() => {
+              const ra = RIFT_ABILITY_MAP[cardMods.riftAbility.abilityId];
+              if (!ra) return null;
+              const raT = ra.tiers[cardMods.riftAbility.tier] ?? ra.tiers[1];
+              return (
+                <div style={{
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: Math.max(fontSize - 1.5, 5),
+                  color: '#ffd700',
+                  textShadow: '0 0 6px #ffd70055',
+                  lineHeight: 1.2,
+                  flexShrink: 0,
+                  marginBottom: 1,
+                }}>
+                  ★ {ra.name} T{cardMods.riftAbility.tier}: {raT.description}
+                </div>
+              );
+            })()}
 
             {/* Mod list */}
             {cardMods.mods.map((applied, i) => {

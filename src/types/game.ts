@@ -55,6 +55,11 @@ export interface GameSettings {
   language: string;
 }
 
+export interface RiftEssence {
+  abilityId: string;
+  tier: number;
+}
+
 export interface GameState {
   player: Player;
   deck: Card[];
@@ -63,6 +68,7 @@ export interface GameState {
   progress: GameProgress;
   settings: GameSettings;
   skills?: PlayerSkills;
+  riftEssences?: RiftEssence[];
   _tierVersion?: number; // 2 = 10-tier system
 }
 

@@ -7,6 +7,7 @@ import { rollCraftingDrop } from '@/data/craftingItems';
 import { MOD_MAP } from '@/data/mods';
 import { pickDecayMod } from '@/data/decayMods';
 import { CORRUPTION_MAP } from '@/data/riftCorruptions';
+import { RIFT_ABILITY_MAP } from '@/data/riftAbilities';
 
 // ── Mod special helpers (10-tier system: reads specialValue directly) ─────────
 
@@ -634,7 +635,13 @@ export class BattleEngine {
         combatant.discard.push(inPlay.card);
         this._log(`${side}'s ${inPlay.card.name} fizzles! (Flickering)`);
       } else {
-        this._resolveScriptEffect(inPlay, combatant, opponent, targetInstanceId);
+        // Rift Ability: execute ability effect instead of base effect
+        const ra = inPlay.card.mods?.riftAbility;
+        if (ra) {
+          this._resolveRiftAbility(ra.abilityId, ra.tier, inPlay, combatant, opponent, targetInstanceId);
+        } else {
+          this._resolveScriptEffect(inPlay, combatant, opponent, targetInstanceId);
+        }
         // Bloated draw: draw cards on play
         const bloatedDraw = getSpecialValue(inPlay, 'bloated_draw');
         if (bloatedDraw > 0) {
@@ -865,6 +872,162 @@ export class BattleEngine {
       } else {
         this._log(`${inPlay.card.name}: no agents in graveyard.`);
       }
+    }
+  }
+
+  /** Execute a Rift Ability effect. */
+  private _resolveRiftAbility(
+    abilityId: string,
+    tier: number,
+    inPlay: CardInPlay,
+    owner: CombatantState,
+    opponent: CombatantState,
+    _targetId?: string,
+  ) {
+    const ability = RIFT_ABILITY_MAP[abilityId];
+    if (!ability) {
+      this._resolveScriptEffect(inPlay, owner, opponent, _targetId);
+      return;
+    }
+    const t = ability.tiers[tier] ?? ability.tiers[1];
+    const v = t.value;
+    this._log(`★ Rift Ability: ${ability.name} (T${tier})`);
+
+    switch (abilityId) {
+      case 'RA01': // Void Pulse — AOE damage to all enemy agents
+        for (const a of [...opponent.field]) this._dealDamageToAgent(a, opponent, v);
+        break;
+      case 'RA02': // Neon Drain — damage + heal
+        if (_targetId) {
+          const t2 = opponent.field.find((c) => c.instanceId === _targetId);
+          if (t2) {
+            this._dealDamageToAgent(t2, opponent, v);
+          } else {
+            opponent.health = Math.max(0, opponent.health - v);
+          }
+        } else {
+          opponent.health = Math.max(0, opponent.health - v);
+        }
+        owner.health = Math.min(owner.maxHealth, owner.health + v);
+        break;
+      case 'RA03': // Data Surge — draw + data cell
+        this._drawCards(owner, v);
+        owner.currentDataCells = Math.min(owner.maxDataCells, owner.currentDataCells + 1);
+        break;
+      case 'RA04': // Chrome Shield — DEF buff to all agents
+        for (const a of owner.field) {
+          a.currentDefense += v;
+          a.buffs.push({ attack: 0, defense: v, source: 'RA04' });
+        }
+        break;
+      case 'RA05': // Grid Overload — direct player damage
+        opponent.health = Math.max(0, opponent.health - v);
+        break;
+      case 'RA06': // Phantom Recall — return from graveyard
+        for (let i = 0; i < v && owner.discard.length > 0; i++) {
+          const card = owner.discard.pop()!;
+          owner.hand.push(makeInstance(card));
+        }
+        break;
+      case 'RA07': // Rift Summon — summon agent
+        {
+          const summon: Card = {
+            id: 'rift_agent', name: 'Rift Agent', type: 'agent',
+            energy: 'neutral', cost: 0, rarity: 'common',
+            attack: v, defense: v, description: 'Summoned by Rift power.',
+          };
+          const inst = makeInstance(summon);
+          inst.summonedThisTurn = true;
+          owner.field.push(inst);
+        }
+        break;
+      case 'RA08': // Entropy Wave — reduce enemy ATK
+        for (const a of opponent.field) {
+          a.currentAttack = Math.max(0, a.currentAttack - v);
+        }
+        break;
+      case 'RA09': // Quantum Lock — skip enemy agents
+        {
+          const lockable = opponent.field.filter((a) => !a.tapped);
+          for (let i = 0; i < v && lockable.length > 0; i++) {
+            const idx = Math.floor(Math.random() * lockable.length);
+            lockable[idx].tapped = true;
+            lockable.splice(idx, 1);
+          }
+        }
+        break;
+      case 'RA10': // Void Siphon — steal HP (instant for now)
+        opponent.health = Math.max(0, opponent.health - v);
+        owner.health = Math.min(owner.maxHealth, owner.health + v);
+        break;
+      case 'RA11': // Neon Storm — multi-hit random
+        {
+          const hits = t.value2 ?? Math.ceil(v / 2);
+          for (let i = 0; i < hits; i++) {
+            const targets = opponent.field.filter((a) => a.currentDefense > 0);
+            if (targets.length > 0) {
+              const pick = targets[Math.floor(Math.random() * targets.length)];
+              this._dealDamageToAgent(pick, opponent, v);
+            } else {
+              opponent.health = Math.max(0, opponent.health - v);
+            }
+          }
+        }
+        break;
+      case 'RA12': // System Purge — destroy enemy traps/malware
+        {
+          let destroyed = 0;
+          while (destroyed < v && opponent.traps.length > 0) {
+            const trap = opponent.traps.pop()!;
+            opponent.discard.push(trap.card);
+            destroyed++;
+          }
+          const malwareToRemove = opponent.field.filter((a) => a.card.type === 'malware');
+          while (destroyed < v && malwareToRemove.length > 0) {
+            const m = malwareToRemove.pop()!;
+            const fi = opponent.field.findIndex((a) => a.instanceId === m.instanceId);
+            if (fi !== -1) { opponent.field.splice(fi, 1); opponent.discard.push(m.card); }
+            destroyed++;
+          }
+        }
+        break;
+      case 'RA13': // Echo Clone — copy strongest agent
+        {
+          const agents = owner.field.filter((a) => a.card.type === 'agent');
+          if (agents.length > 0) {
+            const strongest = agents.reduce((best, a) => a.currentAttack > best.currentAttack ? a : best);
+            const bonus = Math.max(0, v - 1);
+            const clone = makeInstance({ ...strongest.card, name: `${strongest.card.name} (Echo)` });
+            clone.currentAttack = (strongest.card.attack ?? 0) + bonus;
+            clone.currentDefense = (strongest.card.defense ?? 0) + bonus;
+            clone.summonedThisTurn = true;
+            owner.field.push(clone);
+          }
+        }
+        break;
+      case 'RA14': // Rift Blessing — permanent ATK buff
+        for (const a of owner.field) {
+          if (a.card.type === 'agent') a.currentAttack += v;
+        }
+        break;
+      case 'RA15': // Oblivion Gate — destroy all agents
+        for (const a of [...owner.field]) {
+          if (a.card.type === 'agent') {
+            owner.discard.push(a.card);
+          }
+        }
+        owner.field = owner.field.filter((a) => a.card.type !== 'agent');
+        for (const a of [...opponent.field]) {
+          if (a.card.type === 'agent') {
+            opponent.discard.push(a.card);
+          }
+        }
+        opponent.field = opponent.field.filter((a) => a.card.type !== 'agent');
+        break;
+      default:
+        // Unknown ability — fall back to normal effect
+        this._resolveScriptEffect(inPlay, owner, opponent, _targetId);
+        break;
     }
   }
 
@@ -1766,6 +1929,17 @@ export class BattleEngine {
     const profile = ENEMIES[this.state.enemyProfileId];
     const isBoss = profile?.isBoss ?? false;
     return rollCraftingDrop(isBoss);
+  }
+
+  /** Roll a Rift Essence drop (bosses only, 60% chance). */
+  getRiftEssenceDrop(): { abilityId: string; tier: number } | null {
+    const profile = ENEMIES[this.state.enemyProfileId];
+    if (!profile?.isBoss) return null;
+    if (Math.random() > 0.6) return null;
+    const abilities = Object.keys(RIFT_ABILITY_MAP);
+    const abilityId = abilities[Math.floor(Math.random() * abilities.length)];
+    const tier = Math.min(5, 1 + Math.floor(Math.random() * 3)); // T1-T3 mostly
+    return { abilityId, tier };
   }
 }
 

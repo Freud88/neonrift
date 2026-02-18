@@ -18,6 +18,7 @@ export interface CardMods {
   displayName: string;          // e.g. "Ionized Shock Trooper of Stealth"
   locked: string[];             // modIds locked by Quantum Lock
   tierDegradation?: Record<string, number>; // modId → tiers lost (temporary, cleared on zone exit)
+  riftAbility?: { abilityId: string; tier: number }; // boss-dropped rift ability
 }
 
 export interface CardEffect {

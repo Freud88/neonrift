@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { GameState, GameScene, GameSettings, CraftingItemId } from '@/types/game';
+import type { GameState, GameScene, GameSettings, CraftingItemId, RiftEssence } from '@/types/game';
 import type { Card } from '@/types/card';
 import type { ZoneState, ZoneConfig, BiomeId } from '@/types/zone';
 import type { SkillTreeId, PlayerSkills } from '@/types/skills';
@@ -123,6 +123,10 @@ interface GameStoreState {
   allocateSkillPoint: (tree: SkillTreeId) => boolean;
   getSkillLevel: (tree: SkillTreeId) => number;
   hasSkill: (tree: SkillTreeId, minLevel: number) => boolean;
+
+  // Rift Essence actions
+  addRiftEssence: (essence: RiftEssence) => void;
+  applyRiftEssence: (essenceIdx: number, cardIdx: number) => boolean;
 
   // Zone actions
   enterZone: (level: number) => void;
@@ -463,6 +467,54 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   hasSkill: (tree, minLevel) => {
     const { gameState } = get();
     return (gameState?.skills?.trees[tree] ?? 0) >= minLevel;
+  },
+
+  // ── Rift Essence actions ────────────────────────────────────────────────────
+
+  addRiftEssence: (essence) => {
+    set((state) => {
+      if (!state.gameState) return state;
+      const essences = [...(state.gameState.riftEssences ?? []), essence];
+      return { gameState: { ...state.gameState, riftEssences: essences } };
+    });
+    get().saveGame();
+  },
+
+  applyRiftEssence: (essenceIdx, cardIdx) => {
+    const { gameState } = get();
+    if (!gameState) return false;
+    const essences = gameState.riftEssences ?? [];
+    if (essenceIdx < 0 || essenceIdx >= essences.length) return false;
+    const card = gameState.collection[cardIdx];
+    if (!card || (card.type !== 'script' && card.type !== 'malware' && card.type !== 'trap')) return false;
+
+    const essence = essences[essenceIdx];
+    set((state) => {
+      if (!state.gameState) return state;
+      const newCollection = [...state.gameState.collection];
+      const target = { ...newCollection[cardIdx] };
+      target.mods = {
+        ...(target.mods ?? { mods: [], modRarity: 'common' as const, displayName: target.name, locked: [] }),
+        riftAbility: { abilityId: essence.abilityId, tier: essence.tier },
+      };
+      newCollection[cardIdx] = target;
+      // Also update deck if the card is there
+      const newDeck = state.gameState.deck.map((d) =>
+        (d.uniqueId ?? d.id) === (target.uniqueId ?? target.id) ? target : d
+      );
+      const newEssences = [...(state.gameState.riftEssences ?? [])];
+      newEssences.splice(essenceIdx, 1);
+      return {
+        gameState: {
+          ...state.gameState,
+          collection: newCollection,
+          deck: newDeck,
+          riftEssences: newEssences,
+        },
+      };
+    });
+    get().saveGame();
+    return true;
   },
 
   // ── Zone actions ────────────────────────────────────────────────────────────
