@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CARDS } from '@/data/cards';
 import { shuffle } from '@/engine/BattleEngine';
-import { generateModdedCard } from '@/utils/cardMods';
+import { generateModdedCard, pickSingleMod } from '@/utils/cardMods';
 import { CRAFTING_ITEMS, CRAFTING_ITEMS_LIST } from '@/data/craftingItems';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
@@ -429,20 +429,15 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
 
     switch (selectedItem) {
       case 'data_fragment': {
-        // Add exactly 1 new mod to the card (up to max 6)
         const existing = selectedCard.mods?.mods ?? [];
         if (existing.length >= 6) {
           msg = 'Card already has 6 mods (maximum)!';
           setResult({ msg });
           return;
         }
-        // Generate a card with one extra mod and take only the new one
-        const base = { ...selectedCard, mods: undefined };
-        const withExtra = generateModdedCard(base, existing.length + 1);
-        const allNewMods = withExtra.mods?.mods ?? [];
-        // The extra mod is the last one generated
-        const newMod = allNewMods[allNewMods.length - 1];
-        if (!newMod) { msg = 'Failed to generate mod.'; setResult({ msg }); return; }
+        const existingIds = existing.map((m) => m.modId);
+        const newMod = pickSingleMod(selectedCard, existingIds);
+        if (!newMod) { msg = 'No more unique mods available for this card type!'; setResult({ msg }); return; }
         const combinedMods = [...existing, newMod];
         const modRarity = rarityFromModCount(combinedMods.length);
         newCard = {
@@ -542,11 +537,12 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         break;
       }
       case 'architects_key': {
-        const bossMods = MODS.filter((m) => m.isBossMod && m.applicableTo.includes(selectedCard.type));
-        const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
-        if (!pick) { msg = 'No compatible boss mods for this card type!'; setResult({ msg }); return; }
         const existing = selectedCard.mods?.mods ?? [];
         if (existing.length >= 6) { msg = 'Card already has 6 mods (maximum)!'; setResult({ msg }); return; }
+        const existingIds = existing.map((m) => m.modId);
+        const bossMods = MODS.filter((m) => m.isBossMod && m.applicableTo.includes(selectedCard.type) && !existingIds.includes(m.id));
+        const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
+        if (!pick) { msg = 'No compatible boss mods available for this card!'; setResult({ msg }); return; }
         const combinedMods = [...existing, { modId: pick.id, tier: 2 as const }];
         newCard = {
           ...selectedCard,

@@ -89,6 +89,25 @@ function pickMods(card: Card, count: number): AppliedMod[] {
   return chosen;
 }
 
+// ── Pick a single new mod that doesn't duplicate existing ones ────────────────
+
+export function pickSingleMod(card: Card, existingModIds: string[]): AppliedMod | null {
+  const eligible = MODS.filter(
+    (m) => !m.isBossMod && m.applicableTo.includes(card.type) && !existingModIds.includes(m.id)
+  );
+  if (eligible.length === 0) return null;
+
+  const totalWeight = eligible.reduce((s, m) => s + m.weight, 0);
+  let rnd = Math.random() * totalWeight;
+  for (const m of eligible) {
+    rnd -= m.weight;
+    if (rnd <= 0) {
+      return { modId: m.id, tier: rollTier() };
+    }
+  }
+  return { modId: eligible[eligible.length - 1].id, tier: rollTier() };
+}
+
 // ── Build display name ────────────────────────────────────────────────────────
 
 function buildDisplayName(card: Card, mods: AppliedMod[]): string {

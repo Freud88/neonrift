@@ -100,6 +100,30 @@ function getSiphonValue(card: CardInPlay): number {
   return 0;
 }
 
+// Returns disrupt bypass factor for scripts (0 = no bypass, 1 = full bypass)
+function getDisruptValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'disrupt_3') return 0.3;
+    if (sp === 'disrupt_2') return 0.5;
+    if (sp === 'disrupt_1') return 1.0;
+  }
+  return 0;
+}
+
+// Returns breach bonus true damage for agents (ignores shield entirely)
+function getBreachValue(card: CardInPlay): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const sp = mod?.tiers[applied.tier]?.special ?? '';
+    if (sp === 'breach_3') return 1;
+    if (sp === 'breach_2') return 2;
+    if (sp === 'breach_1') return 3;
+  }
+  return 0;
+}
+
 void getModSpecial;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -393,11 +417,11 @@ export class BattleEngine {
       if (effect.target === 'any' && targetId) {
         const t = opponent.field.find((c) => c.instanceId === targetId);
         if (t) { this._dealDamageToAgent(t, opponent, dmg); }
-        else   { opponent.health -= dmg; }
+        else   { this._dealScriptDamageToPlayer(inPlay, opponent, dmg); }
       } else if (effect.target === 'all_enemy_agents') {
         for (const t of [...opponent.field]) this._dealDamageToAgent(t, opponent, dmg);
       } else if (!targetId) {
-        opponent.health -= dmg;
+        this._dealScriptDamageToPlayer(inPlay, opponent, dmg);
       }
       // Siphon: heal owner after dealing damage
       if (siphon > 0) {
@@ -493,6 +517,19 @@ export class BattleEngine {
       .reduce((sum, c) => sum + c.currentDefense, 0);
   }
 
+  /** Apply script damage to player, accounting for shield + disrupt bypass */
+  private _dealScriptDamageToPlayer(script: CardInPlay, target: CombatantState, dmg: number) {
+    const side = target === this.state.player ? 'player' : 'enemy';
+    const shield = this.calculateShield(side);
+    const disrupt = getDisruptValue(script);
+    const effectiveShield = Math.round(shield * (1 - disrupt));
+    const effectiveDmg = Math.max(0, dmg - effectiveShield);
+    target.health -= effectiveDmg;
+    if (disrupt > 0 && shield > 0) {
+      this._log(`${script.card.name} disrupts shield (${Math.round(disrupt * 100)}% bypass): ${dmg} - ${effectiveShield}/${shield} shield = ${effectiveDmg}`);
+    }
+  }
+
   // ── Combat — Player chooses target per attacker ───────────────────────────────
 
   /** Returns true if the given player agent can attack this turn */
@@ -569,10 +606,18 @@ export class BattleEngine {
 
     const shield = this.calculateShield('enemy');
     const effectiveShield = Math.round(shield * (1 - shieldBypass));
-    const effectiveDmg = Math.max(0, rawDmg - effectiveShield);
+    const shieldedDmg = Math.max(0, rawDmg - effectiveShield);
+
+    // Breach mod: bonus true damage that ignores shield entirely
+    const breach = getBreachValue(attacker);
+    const effectiveDmg = shieldedDmg + breach;
 
     enemy.health -= effectiveDmg;
-    this._log(`${attacker.card.name} attacks player directly: ${rawDmg} - ${effectiveShield} shield = ${effectiveDmg} damage`);
+    if (breach > 0) {
+      this._log(`${attacker.card.name} attacks player: ${rawDmg} - ${effectiveShield} shield = ${shieldedDmg} + ${breach} breach = ${effectiveDmg}`);
+    } else {
+      this._log(`${attacker.card.name} attacks player directly: ${rawDmg} - ${effectiveShield} shield = ${effectiveDmg} damage`);
+    }
 
     // Drain: heal on direct player damage
     const drain = getDrainValue(attacker);
@@ -582,7 +627,7 @@ export class BattleEngine {
     }
 
     this._checkWinCondition();
-    return { type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: rawDmg - effectiveDmg, target: 'player' };
+    return { type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: rawDmg - shieldedDmg, target: 'player' };
   }
 
   // Keep declareAttacker for backward compat (battleStore legacy path)
@@ -636,9 +681,11 @@ export class BattleEngine {
         events.push({ type: 'combat', attacker, blocker, attackerDmg, blockerDmg, target: 'agent' });
       } else {
         const shield = this.calculateShield('enemy');
-        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        const breach = getBreachValue(attacker);
+        const shieldedDmg = Math.max(0, attacker.currentAttack - shield);
+        const effectiveDmg = shieldedDmg + breach;
         enemy.health -= effectiveDmg;
-        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
         const drain = getDrainValue(attacker);
         if (drain > 0) player.health = Math.min(player.maxHealth, player.health + drain);
       }
@@ -662,9 +709,11 @@ export class BattleEngine {
       // Stealth: can't be targeted
       if (attacker.stealthTurns > 0) {
         const shield = this.calculateShield('player');
-        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        const breach = getBreachValue(attacker);
+        const shieldedDmg = Math.max(0, attacker.currentAttack - shield);
+        const effectiveDmg = shieldedDmg + breach;
         player.health -= effectiveDmg;
-        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
         const drain = getDrainValue(attacker);
         if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
         continue;
@@ -701,12 +750,14 @@ export class BattleEngine {
         }
         events.push({ type: 'combat', attacker, blocker: target, attackerDmg, blockerDmg: defenderDmg, target: 'agent' });
       } else {
-        // Attack player directly — shield reduces damage
+        // Attack player directly — shield reduces damage, breach bypasses
         const shield = this.calculateShield('player');
-        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        const breach = getBreachValue(attacker);
+        const shieldedDmg = Math.max(0, attacker.currentAttack - shield);
+        const effectiveDmg = shieldedDmg + breach;
         player.health -= effectiveDmg;
-        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
-        this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield = ${effectiveDmg}`);
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
+        this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield + ${breach} breach = ${effectiveDmg}`);
         const drain = getDrainValue(attacker);
         if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
       }

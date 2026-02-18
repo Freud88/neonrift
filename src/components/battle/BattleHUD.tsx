@@ -53,12 +53,20 @@ function HealthBar({ current, max, color }: { current: number; max: number; colo
   );
 }
 
+function calcShield(combatant: CombatantState): number {
+  return combatant.field
+    .filter((c) => c.card.type === 'agent' && c.currentDefense > 0)
+    .reduce((sum, c) => sum + c.currentDefense, 0);
+}
+
 export default function BattleHUD({
   player, enemy, enemyProfileId, turnPhase, battlePhase, isAnimating, onEndTurn,
 }: BattleHUDProps) {
   const profile = ENEMIES[enemyProfileId];
   const isPlayerTurn = battlePhase === 'player_turn';
   const canEndTurn = isPlayerTurn && !isAnimating;
+  const playerShield = calcShield(player);
+  const enemyShield = calcShield(enemy);
 
   return (
     <>
@@ -85,6 +93,12 @@ export default function BattleHUD({
           </div>
           <HealthBar current={enemy.health} max={enemy.maxHealth} color="#ff4444" />
         </div>
+        {enemyShield > 0 && (
+          <div style={{ textAlign: 'center', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#444466', marginBottom: 2 }}>SHIELD</div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#4488ff' }}>{enemyShield}</div>
+          </div>
+        )}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#444466', marginBottom: 2 }}>HAND</div>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#ff4444' }}>{enemy.hand.length}</div>
@@ -106,6 +120,12 @@ export default function BattleHUD({
             </div>
             <HealthBar current={player.health} max={player.maxHealth} color="#00f0ff" />
           </div>
+          {playerShield > 0 && (
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#444466' }}>SHIELD</div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#4488ff' }}>{playerShield}</div>
+            </div>
+          )}
           <div style={{ textAlign: 'center', flexShrink: 0 }}>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: '#444466' }}>DECK</div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#6666aa' }}>{player.deck.length}</div>

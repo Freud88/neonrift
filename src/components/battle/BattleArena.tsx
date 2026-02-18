@@ -26,14 +26,16 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const {
     battleState,
     selectedCardId,
+    pendingAttackerId,
     isAnimating,
     pendingEnemyCard,
     acceptHand,
     doMulligan,
     selectCard,
     playCard,
-    declareAttacker,
-    confirmAttack,
+    selectAttacker,
+    attackVsAgent,
+    attackVsPlayer,
     endPlayerTurn,
     acknowledgeEnemyCard,
     clearBattle,
@@ -118,29 +120,47 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   }, [battleState, selectCard]);
 
   const handleFieldClick = useCallback((instanceId: string, side: 'player' | 'enemy') => {
-    if (!battleState || battleState.phase !== 'player_turn') return;
+    if (!battleState || battleState.phase !== 'player_turn' || isAnimating) return;
 
+    // Script/spell targeting: play card on enemy agent
     if (requiresTarget && selectedCardId && side === 'enemy') {
-      // Play selected card targeting this enemy agent
       playCard(selectedCardId, instanceId);
       setRequiresTarget(false);
       return;
     }
 
-    if (side === 'player') {
-      // Declare/undeclare attacker
-      declareAttacker(instanceId);
+    // Player clicks enemy agent while an attacker is selected → attack it
+    if (side === 'enemy' && pendingAttackerId) {
+      attackVsAgent(instanceId);
+      return;
     }
-  }, [battleState, requiresTarget, selectedCardId, playCard, declareAttacker]);
+
+    // Player clicks their own agent → select/deselect as attacker
+    if (side === 'player') {
+      if (pendingAttackerId === instanceId) {
+        selectAttacker(null); // deselect
+      } else {
+        selectAttacker(instanceId);
+      }
+    }
+  }, [battleState, isAnimating, requiresTarget, selectedCardId, pendingAttackerId, playCard, selectAttacker, attackVsAgent]);
 
   const handleEnemyPortraitClick = useCallback(() => {
-    if (!battleState || battleState.phase !== 'player_turn') return;
+    if (!battleState || battleState.phase !== 'player_turn' || isAnimating) return;
+
+    // Script targeting → enemy player
     if (requiresTarget && selectedCardId) {
-      // Target enemy player directly
       playCard(selectedCardId, 'enemy_player');
       setRequiresTarget(false);
+      return;
     }
-  }, [battleState, requiresTarget, selectedCardId, playCard]);
+
+    // Attacker selected → attack enemy player directly
+    if (pendingAttackerId) {
+      attackVsPlayer();
+      return;
+    }
+  }, [battleState, isAnimating, requiresTarget, selectedCardId, pendingAttackerId, playCard, attackVsPlayer]);
 
   const handlePlayCard = useCallback((instanceId: string, targetId?: string) => {
     if (!battleState || battleState.phase !== 'player_turn') return;
@@ -156,16 +176,10 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     }
   }, [battleState, playCard]);
 
-  const handleConfirmAttack = useCallback(async () => {
-    await confirmAttack();
-  }, [confirmAttack]);
-
   const handleEndTurn = useCallback(async () => {
-    if (battleState?.attackers && battleState.attackers.length > 0) {
-      await handleConfirmAttack();
-    }
+    selectAttacker(null); // clear any pending attacker
     await endPlayerTurn();
-  }, [battleState, endPlayerTurn, handleConfirmAttack]);
+  }, [endPlayerTurn, selectAttacker]);
 
   // ── Rewards handling ────────────────────────────────────────────────────────
 
@@ -199,9 +213,9 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     );
   }
 
-  const { player, enemy, phase, turnPhase, attackers } = battleState;
+  const { player, enemy, phase, turnPhase } = battleState;
   const isPlayerTurn = phase === 'player_turn';
-  const hasAttackers = attackers.length > 0;
+  const hasAttacker = !!pendingAttackerId;
 
   return (
     <motion.div
@@ -236,14 +250,14 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
 
       {/* Enemy field */}
       <div
-        style={{ padding: '0 8px', cursor: requiresTarget ? 'crosshair' : 'default' }}
-        onClick={requiresTarget ? handleEnemyPortraitClick : undefined}
+        style={{ padding: '0 8px', cursor: (requiresTarget || hasAttacker) ? 'crosshair' : 'default' }}
+        onClick={handleEnemyPortraitClick}
       >
         <FieldComponent
           cards={enemy.field}
           traps={enemy.traps}
           side="enemy"
-          isTargeting={requiresTarget}
+          isTargeting={requiresTarget || hasAttacker}
           onCardClick={(id) => handleFieldClick(id, 'enemy')}
         />
       </div>
@@ -265,17 +279,17 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
         cards={player.field}
         traps={player.traps}
         side="player"
-        attackers={attackers}
+        attackers={pendingAttackerId ? [pendingAttackerId] : []}
         canAttack={isPlayerTurn && !isAnimating}
         onCardClick={(id) => handleFieldClick(id, 'player')}
       />
 
-      {/* Attack confirm button */}
+      {/* Attack target hint */}
       <AnimatePresence>
-        {hasAttackers && isPlayerTurn && !isAnimating && (
+        {hasAttacker && isPlayerTurn && !isAnimating && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             style={{
               position: 'absolute',
@@ -283,25 +297,17 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 10,
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 9,
+              color: '#ff4400',
+              letterSpacing: '0.15em',
+              background: 'rgba(5,5,20,0.9)',
+              border: '1px solid rgba(255,68,0,0.4)',
+              padding: '6px 14px',
+              textAlign: 'center',
             }}
           >
-            <button
-              onClick={handleConfirmAttack}
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.15em',
-                background: 'rgba(255,68,0,0.15)',
-                border: '2px solid #ff4400',
-                color: '#ff4400',
-                padding: '8px 18px',
-                cursor: 'pointer',
-                boxShadow: '0 0 12px rgba(255,68,0,0.4)',
-              }}
-            >
-              ⚔ ATTACK ({attackers.length})
-            </button>
+            ⚔ CLICK ENEMY AGENT OR PORTRAIT TO ATTACK
           </motion.div>
         )}
       </AnimatePresence>
