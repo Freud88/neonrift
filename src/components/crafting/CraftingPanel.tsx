@@ -18,6 +18,7 @@ interface CraftingPanelProps {
 export default function CraftingPanel({ onClose }: CraftingPanelProps) {
   const { gameState, removeCraftingItem } = useGameStore();
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [activeItem, setActiveItem] = useState<CraftingItemId | null>(null);
   const [flashMsg, setFlashMsg] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,9 +28,8 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
 
   // Keep selectedCard in sync with collection (after modifications)
   useEffect(() => {
-    if (selectedCard) {
-      const updated = collection.find((c) => c.id === selectedCard.id);
-      if (updated) setSelectedCard(updated);
+    if (selectedIndex >= 0 && selectedIndex < collection.length) {
+      setSelectedCard(collection[selectedIndex]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collection]);
@@ -179,22 +179,19 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
         msg = 'Unknown item';
     }
 
-    // Update card in collection
+    // Update card in collection by index (only this specific card)
     useGameStore.setState((s) => {
-      if (!s.gameState) return s;
+      if (!s.gameState || selectedIndex < 0) return s;
+      const coll = [...s.gameState.collection];
+      coll[selectedIndex] = newCard;
       return {
-        gameState: {
-          ...s.gameState,
-          collection: s.gameState.collection.map((c) =>
-            c.id === selectedCard.id ? newCard : c
-          ),
-        },
+        gameState: { ...s.gameState, collection: coll },
       };
     });
     useGameStore.getState().saveGame();
     setSelectedCard(newCard);
     showFlash(msg);
-  }, [activeItem, selectedCard, gameState, removeCraftingItem, showFlash]);
+  }, [activeItem, selectedCard, selectedIndex, gameState, removeCraftingItem, showFlash]);
 
   // ── Card click handler (applies selected item) ────────────────────────────
 
@@ -257,7 +254,7 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
               <motion.div
                 key={card.id + i + (card.mods?.displayName ?? '')}
                 whileHover={{ y: -6, scale: 1.02 }}
-                onClick={() => setSelectedCard(card)}
+                onClick={() => { setSelectedCard(card); setSelectedIndex(i); }}
                 style={{ cursor: 'pointer', borderRadius: 4 }}
               >
                 <CardComponent card={card} size="hand" selected={false} />
@@ -290,7 +287,7 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => { setSelectedCard(null); setActiveItem(null); }}
+            onClick={() => { setSelectedCard(null); setSelectedIndex(-1); setActiveItem(null); }}
             style={{
               background: 'transparent', border: '1px solid rgba(0,240,255,0.3)',
               color: '#00f0ff', fontSize: 10, padding: '4px 10px',

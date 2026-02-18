@@ -413,6 +413,7 @@ interface ItemsTabProps {
 function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: ItemsTabProps) {
   const [selectedItem, setSelectedItem] = useState<CraftingItemId | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [selectedCardIndex, setSelectedCardIndex] = useState<number>(-1);
   const [result, setResult] = useState<{ msg: string; card?: Card } | null>(null);
 
   const itemQty = (id: CraftingItemId) =>
@@ -563,30 +564,30 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         msg = 'Unknown item';
     }
 
-    // Update card in both collection and deck
+    // Update card in collection by index (only this specific card)
+    // Also update matching card in deck if present
     useGameStore.setState((s) => {
-      if (!s.gameState) return s;
+      if (!s.gameState || selectedCardIndex < 0) return s;
+      const coll = [...s.gameState.collection];
+      const oldCard = coll[selectedCardIndex];
+      coll[selectedCardIndex] = newCard;
+      // Update deck: find the same card instance by old reference match
+      const deck = s.gameState.deck.map((c) => c === oldCard ? newCard : c);
       return {
-        gameState: {
-          ...s.gameState,
-          collection: s.gameState.collection.map((c) =>
-            c.id === selectedCard.id ? newCard : c
-          ),
-          deck: s.gameState.deck.map((c) =>
-            c.id === selectedCard.id ? newCard : c
-          ),
-        },
+        gameState: { ...s.gameState, collection: coll, deck },
       };
     });
     useGameStore.getState().saveGame();
     setResult({ msg, card: newCard });
     setSelectedCard(null);
+    setSelectedCardIndex(-1);
     setSelectedItem(null);
-  }, [selectedItem, selectedCard, removeCraftingItem]);
+  }, [selectedItem, selectedCard, selectedCardIndex, removeCraftingItem]);
 
   const reset = () => {
     setResult(null);
     setSelectedCard(null);
+    setSelectedCardIndex(-1);
     setSelectedItem(null);
   };
 
@@ -684,7 +685,7 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
                     <motion.button
                       key={id}
                       whileHover={{ scale: 1.04 }}
-                      onClick={() => { setSelectedItem(active ? null : id); setSelectedCard(null); }}
+                      onClick={() => { setSelectedItem(active ? null : id); setSelectedCard(null); setSelectedCardIndex(-1); }}
                       style={{
                         background: active ? `rgba(${hexToRgb(def.color)},0.2)` : 'rgba(255,255,255,0.04)',
                         border: `1px solid ${active ? def.color : '#334'}`,
@@ -713,13 +714,16 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
                   SELECT CARD FROM COLLECTION
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
-                  {collection.map((card) => {
-                    const isSelected = selectedCard?.id === card.id;
+                  {collection.map((card, idx) => {
+                    const isSelected = selectedCardIndex === idx;
                     return (
                       <motion.div
-                        key={card.id + (card.mods?.displayName ?? '')}
+                        key={card.id + idx + (card.mods?.displayName ?? '')}
                         whileHover={{ y: -4 }}
-                        onClick={() => setSelectedCard(isSelected ? null : card)}
+                        onClick={() => {
+                          if (isSelected) { setSelectedCard(null); setSelectedCardIndex(-1); }
+                          else { setSelectedCard(card); setSelectedCardIndex(idx); }
+                        }}
                         style={{
                           cursor: 'pointer',
                           outline: isSelected ? '2px solid #00f0ff' : 'none',
