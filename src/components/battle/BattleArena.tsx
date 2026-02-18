@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useBattleStore } from '@/stores/battleStore';
 import { useGameStore } from '@/stores/gameStore';
+import { setRiftLevelForTierRoll } from '@/utils/cardMods';
 import { ENEMIES } from '@/data/enemies';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
@@ -42,7 +43,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     engine,
   } = useBattleStore();
 
-  const { gameState, defeatEnemy, defeatBoss, incrementLoss, addToCollection, addCraftingItem } = useGameStore();
+  const { gameState, activeZone, defeatEnemy, defeatBoss, incrementLoss, addToCollection, addCraftingItem } = useGameStore();
 
   const [mulliganUsed, setMulliganUsed]       = useState(false);
   const [rewardsReady, setRewardsReady]       = useState(false);
@@ -60,6 +61,8 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const { startBattle } = useBattleStore();
   useEffect(() => {
     if (!gameState) return;
+    // Set rift level for tier rolling (higher zone = better enemy mod tiers)
+    setRiftLevelForTierRoll(activeZone?.config.level ?? 0);
     startBattle(gameState.deck, enemyProfileId, overrideProfile);
     return () => clearBattle();
     // eslint-disable-next-line react-hooks/exhaustive-deps

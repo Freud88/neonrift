@@ -160,8 +160,15 @@ export default function GamePage() {
     // Zone regular enemy — mark defeated and collect shards
     if (zoneBattleKey && result === 'win') {
       markZoneEnemyDefeated(zoneBattleKey);
-      if (Math.random() < 0.15) {
+      // Higher shard drop rate for early zones (40% base, 15% at higher levels)
+      const zone = useGameStore.getState().activeZone;
+      const shardChance = zone && zone.config.level <= 3 ? 0.5 : 0.25;
+      if (Math.random() < shardChance) {
         collectShard(1);
+      }
+      // Early zones: bonus credits per win
+      if (zone && zone.config.level <= 3) {
+        addCredits(5 + Math.floor(Math.random() * 10));
       }
     }
 
@@ -224,7 +231,7 @@ export default function GamePage() {
     const zone = useGameStore.getState().activeZone;
     if (!zone) return;
     setZoneBattleKey(enemyKey);
-    const profile = generateEnemyProfile(profileSeed, zone.config, false);
+    const profile = generateEnemyProfile(profileSeed, zone.config, false, zone.riftClock?.currentStage ?? 0);
     setZoneBattleProfile(profile);
     handleBattleStart(`zone_enemy_${enemyKey}`, profile.id);
   }, [handleBattleStart]);
@@ -233,7 +240,7 @@ export default function GamePage() {
     const zone = useGameStore.getState().activeZone;
     if (!zone) return;
     const bossSeed = `${zone.config.seed}_boss`;
-    const profile = generateEnemyProfile(bossSeed, zone.config, true);
+    const profile = generateEnemyProfile(bossSeed, zone.config, true, zone.riftClock?.currentStage ?? 0);
     setIsBossBattle(true);
     setZoneBattleProfile(profile);
     handleBattleStart('zone_boss', profile.id);

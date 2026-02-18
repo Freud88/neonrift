@@ -17,6 +17,7 @@ export class ChunkManager {
   private config: ZoneConfig;
   private lastCenterCX = Infinity;
   private lastCenterCY = Infinity;
+  decayStage = 0;
 
   constructor(config: ZoneConfig) {
     this.config = config;
@@ -31,7 +32,7 @@ export class ChunkManager {
     const k = this.key(cx, cy);
     let chunk = this.cache.get(k);
     if (!chunk) {
-      chunk = generateChunk(cx, cy, this.config);
+      chunk = generateChunk(cx, cy, this.config, this.decayStage);
       this.cache.set(k, chunk);
     }
     return chunk;

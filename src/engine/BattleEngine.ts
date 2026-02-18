@@ -5,114 +5,48 @@ import { ENEMIES } from '@/data/enemies';
 import { rollCraftingDrop } from '@/data/craftingItems';
 import { MOD_MAP } from '@/data/mods';
 
-// ── Mod special helpers ───────────────────────────────────────────────────────
+// ── Mod special helpers (10-tier system: reads specialValue directly) ─────────
 
-function getModSpecial(card: CardInPlay, specialId: string): boolean {
+/** Returns the specialValue for the first mod matching the given special name. */
+function getSpecialValue(card: CardInPlay, specialName: string): number {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const effect = mod?.tiers[applied.tier];
+    if (effect?.special === specialName) return effect.specialValue ?? 0;
+  }
+  return 0;
+}
+
+/** Returns both specialValue and specialValue2 for a mod. */
+function getSpecialValues(card: CardInPlay, specialName: string): { v1: number; v2: number } {
+  for (const applied of card.card.mods?.mods ?? []) {
+    const mod = MOD_MAP[applied.modId];
+    const effect = mod?.tiers[applied.tier];
+    if (effect?.special === specialName) {
+      return { v1: effect.specialValue ?? 0, v2: effect.specialValue2 ?? 0 };
+    }
+  }
+  return { v1: 0, v2: 0 };
+}
+
+/** Returns true if card has any mod with the given special name. */
+function hasSpecial(card: CardInPlay, specialName: string): boolean {
   return card.card.mods?.mods.some((m) => {
     const mod = MOD_MAP[m.modId];
-    return mod?.tiers[m.tier]?.special === specialId ||
-      (mod?.tiers[m.tier]?.special?.startsWith(specialId.split('_')[0]) &&
-       specialId.startsWith(mod?.tiers[m.tier]?.special?.split('_')[0] ?? '___'));
+    return mod?.tiers[m.tier]?.special === specialName;
   }) ?? false;
 }
 
-// Returns drain value (0 if none)
-function getDrainValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'drain_3') return 1;
-    if (sp === 'drain_2') return 2;
-    if (sp === 'drain_1') return 3;
-  }
-  return 0;
-}
-
-// Returns corrode values { atk, def }
-function getCorrodeValue(card: CardInPlay): { atk: number; def: number } {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'corrode_3') return { atk: 0, def: 1 };
-    if (sp === 'corrode_2') return { atk: 1, def: 1 };
-    if (sp === 'corrode_1') return { atk: 2, def: 1 };
-  }
-  return { atk: 0, def: 0 };
-}
-
-// Returns detonate damage (0 if none)
-function getDetonateValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'detonate_3') return 1;
-    if (sp === 'detonate_2') return 2;
-    if (sp === 'detonate_1') return 3;
-  }
-  return 0;
-}
-
-// Returns recurse probability (0 if none)
-function getRecurseChance(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'recurse_3') return 0.3;
-    if (sp === 'recurse_2') return 0.5;
-    if (sp === 'recurse_1') return 1.0;
-  }
-  return 0;
-}
-
-// Returns shield bonus for agents entering the field
-function getShieldValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'shield_1') return 1;
-    if (sp === 'shield_2') return 2;
-    if (sp === 'shield_3') return 3;
-  }
-  return 0;
-}
-
-// Returns siphon heal bonus for scripts
-function getSiphonValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'siphon_3') return 1;
-    if (sp === 'siphon_2') return 2;
-    if (sp === 'siphon_1') return 3;
-  }
-  return 0;
-}
-
-// Returns shield bypass factor for scripts (0 = no bypass, 1 = full bypass)
-function getDisruptValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'shieldbypass_3') return 0.3;
-    if (sp === 'shieldbypass_2') return 0.5;
-    if (sp === 'shieldbypass_1') return 1.0;
-  }
-  return 0;
-}
-
-// Returns breach bonus true damage for agents (ignores shield entirely)
-function getBreachValue(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'truedmg_3') return 1;
-    if (sp === 'truedmg_2') return 2;
-    if (sp === 'truedmg_1') return 3;
-  }
-  return 0;
-}
-
-void getModSpecial;
+// Convenience aliases for readability
+const getDrainPercent = (card: CardInPlay) => getSpecialValue(card, 'drain');
+const getCorrodeValues = (card: CardInPlay) => getSpecialValues(card, 'corrode');
+const getDetonateValue = (card: CardInPlay) => getSpecialValue(card, 'detonate');
+const getDetonatePlayerDmg = (card: CardInPlay) => getSpecialValues(card, 'detonate').v2;
+const getRecurseChance = (card: CardInPlay) => getSpecialValue(card, 'recurse') / 100;
+const getShieldValue = (card: CardInPlay) => getSpecialValue(card, 'shield');
+const getSiphonValue = (card: CardInPlay) => getSpecialValue(card, 'siphon');
+const getDisruptValue = (card: CardInPlay) => getSpecialValue(card, 'shieldbypass') / 100;
+const getBreachValue = (card: CardInPlay) => getSpecialValue(card, 'truedmg');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -340,9 +274,23 @@ export class BattleEngine {
       this._checkTraps(opponent, inPlay, 'on_play_agent');
 
     } else if (type === 'script') {
-      this._resolveScriptEffect(inPlay, combatant, opponent, targetInstanceId);
-      combatant.discard.push(inPlay.card);
-      this._log(`${side} plays Script: ${inPlay.card.name}`);
+      // Flickering: chance to fizzle (card consumed but no effect)
+      const flickerChance = getSpecialValue(inPlay, 'flickering') / 100;
+      if (flickerChance > 0 && Math.random() < flickerChance) {
+        combatant.discard.push(inPlay.card);
+        this._log(`${side}'s ${inPlay.card.name} fizzles! (Flickering)`);
+      } else {
+        this._resolveScriptEffect(inPlay, combatant, opponent, targetInstanceId);
+        // Recursive: chance to return to hand instead of discard
+        const recurseChance = getRecurseChance(inPlay);
+        if (recurseChance > 0 && Math.random() < recurseChance) {
+          combatant.hand.push(inPlay);
+          this._log(`${inPlay.card.name} returns to hand! (Recursive)`);
+        } else {
+          combatant.discard.push(inPlay.card);
+        }
+        this._log(`${side} plays Script: ${inPlay.card.name}`);
+      }
 
       // Check opponent traps
       this._checkTraps(opponent, inPlay, 'on_play_script');
@@ -397,20 +345,74 @@ export class BattleEngine {
     const effect = inPlay.card.effect;
     if (!effect) return;
 
+    // Collect mod specials for this script
     const siphon = getSiphonValue(inPlay);
+    const drainPct = getDrainPercent(inPlay);
+    const corrode = getCorrodeValues(inPlay);
+    const detonateDmg = getDetonateValue(inPlay);
+    const forkedEfficacy = getSpecialValue(inPlay, 'forked');
+
+    let totalDamageDealt = 0;
 
     if (effect.type === 'damage') {
       const dmg = effect.value ?? 0;  // amp bonus already baked into effect.value by mod system
+
+      // ── Primary effect resolution ──
       if (effect.target === 'any' && targetId) {
         const t = opponent.field.find((c) => c.instanceId === targetId);
-        if (t) { this._dealDamageToAgent(t, opponent, dmg); }
-        else   { this._dealScriptDamageToPlayer(inPlay, opponent, dmg); }
+        if (t) {
+          const defBefore = t.currentDefense;
+          this._dealDamageToAgent(t, opponent, dmg);
+          totalDamageDealt += dmg;
+          // Corrode: reduce target defense
+          if (corrode.v1 > 0 && t.currentDefense > 0) {
+            t.currentDefense = Math.max(0, t.currentDefense - corrode.v1);
+            this._log(`${t.card.name} corroded: -${corrode.v1} DEF`);
+          }
+          // Detonate: if target dies, AOE damage to remaining agents
+          if (t.currentDefense <= 0 && detonateDmg > 0) {
+            for (const a of [...opponent.field]) {
+              if (a !== t && a.currentDefense > 0) {
+                this._dealDamageToAgent(a, opponent, detonateDmg);
+                this._log(`Detonation: ${a.card.name} takes ${detonateDmg} damage`);
+              }
+            }
+          }
+        } else {
+          this._dealScriptDamageToPlayer(inPlay, opponent, dmg);
+          totalDamageDealt += dmg;
+        }
       } else if (effect.target === 'all_enemy_agents') {
-        for (const t of [...opponent.field]) this._dealDamageToAgent(t, opponent, dmg);
+        for (const t of [...opponent.field]) {
+          this._dealDamageToAgent(t, opponent, dmg);
+          totalDamageDealt += dmg;
+          if (corrode.v1 > 0 && t.currentDefense > 0) {
+            t.currentDefense = Math.max(0, t.currentDefense - corrode.v1);
+          }
+        }
       } else if (!targetId) {
         this._dealScriptDamageToPlayer(inPlay, opponent, dmg);
+        totalDamageDealt += dmg;
       }
-      // Siphon: heal owner after dealing damage
+
+      // ── Forked: re-launch effect on random additional targets ──
+      if (forkedEfficacy > 0 && opponent.field.length > 0) {
+        const forkedDmg = Math.max(1, Math.floor(dmg * forkedEfficacy / 100));
+        const forkTarget = opponent.field[Math.floor(Math.random() * opponent.field.length)];
+        if (forkTarget && forkTarget.currentDefense > 0) {
+          this._dealDamageToAgent(forkTarget, opponent, forkedDmg);
+          totalDamageDealt += forkedDmg;
+          this._log(`Forked: ${forkTarget.card.name} takes ${forkedDmg} damage`);
+        }
+      }
+
+      // ── Drain: lifesteal (percentage of total damage dealt) ──
+      if (drainPct > 0 && totalDamageDealt > 0) {
+        const healed = Math.ceil(totalDamageDealt * drainPct / 100);
+        owner.health = Math.min(owner.maxHealth, owner.health + healed);
+        this._log(`Drain: healed ${healed} HP`);
+      }
+      // Siphon: flat HP heal after dealing damage
       if (siphon > 0) {
         owner.health = Math.min(owner.maxHealth, owner.health + siphon);
       }
@@ -552,13 +554,13 @@ export class BattleEngine {
     this._dealDamageToAgent(defender, enemy,  Math.max(0, attackerDmg - defenderArmor), attacker, player);
     this._dealDamageToAgent(attacker, player, Math.max(0, defenderDmg - attackerArmor));
 
-    // Corrode
-    const corrode = getCorrodeValue(attacker);
-    if (corrode.atk > 0 || corrode.def > 0) {
+    // Corrode: v1 = ATK reduction, v2 = DEF reduction
+    const corrode = getCorrodeValues(attacker);
+    if (corrode.v1 > 0 || corrode.v2 > 0) {
       const stillAlive = enemy.field.find((c) => c.instanceId === defender.instanceId);
       if (stillAlive) {
-        stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
-        stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+        stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.v1);
+        stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
       }
     }
 
@@ -583,13 +585,8 @@ export class BattleEngine {
 
     // Phasing mod: bypass some or all shield
     let shieldBypass = 0;
-    for (const applied of attacker.card.mods?.mods ?? []) {
-      const mod = MOD_MAP[applied.modId];
-      const sp = mod?.tiers[applied.tier]?.special ?? '';
-      if (sp === 'phasing_3') shieldBypass = 0.3;
-      if (sp === 'phasing_2') shieldBypass = 0.5;
-      if (sp === 'phasing_1') shieldBypass = 1.0;
-    }
+    const phasingPct = getSpecialValue(attacker, 'phasing');
+    if (phasingPct > 0) shieldBypass = phasingPct / 100;
 
     const shield = this.calculateShield('enemy');
     const effectiveShield = Math.round(shield * (1 - shieldBypass));
@@ -606,11 +603,12 @@ export class BattleEngine {
       this._log(`${attacker.card.name} attacks player directly: ${rawDmg} - ${effectiveShield} shield = ${effectiveDmg} damage`);
     }
 
-    // Drain: heal on direct player damage
-    const drain = getDrainValue(attacker);
-    if (drain > 0) {
-      player.health = Math.min(player.maxHealth, player.health + drain);
-      this._log(`${attacker.card.name} drains ${drain} life!`);
+    // Drain: heal % of damage dealt on direct player damage
+    const drainPct = getDrainPercent(attacker);
+    if (drainPct > 0 && effectiveDmg > 0) {
+      const healed = Math.ceil(effectiveDmg * drainPct / 100);
+      player.health = Math.min(player.maxHealth, player.health + healed);
+      this._log(`${attacker.card.name} drains ${healed} life! (${drainPct}%)`);
     }
 
     this._checkWinCondition();
@@ -657,12 +655,12 @@ export class BattleEngine {
         const blockerArmor  = blocker.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
         this._dealDamageToAgent(blocker,  enemy,  Math.max(0, attackerDmg - blockerArmor), attacker, player);
         this._dealDamageToAgent(attacker, player, Math.max(0, blockerDmg  - attackerArmor));
-        const corrode = getCorrodeValue(attacker);
-        if (corrode.atk > 0 || corrode.def > 0) {
+        const corrode = getCorrodeValues(attacker);
+        if (corrode.v1 > 0 || corrode.v2 > 0) {
           const stillAlive = enemy.field.find((c) => c.instanceId === blocker.instanceId);
           if (stillAlive) {
-            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
-            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.v1);
+            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
           }
         }
         events.push({ type: 'combat', attacker, blocker, attackerDmg, blockerDmg, target: 'agent' });
@@ -673,8 +671,11 @@ export class BattleEngine {
         const effectiveDmg = shieldedDmg + breach;
         enemy.health -= effectiveDmg;
         events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
-        const drain = getDrainValue(attacker);
-        if (drain > 0) player.health = Math.min(player.maxHealth, player.health + drain);
+        const drainPct = getDrainPercent(attacker);
+        if (drainPct > 0 && effectiveDmg > 0) {
+          const healed = Math.ceil(effectiveDmg * drainPct / 100);
+          player.health = Math.min(player.maxHealth, player.health + healed);
+        }
       }
     }
     this.state.attackers = [];
@@ -701,8 +702,11 @@ export class BattleEngine {
         const effectiveDmg = shieldedDmg + breach;
         player.health -= effectiveDmg;
         events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
-        const drain = getDrainValue(attacker);
-        if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
+        const drainPct = getDrainPercent(attacker);
+        if (drainPct > 0 && effectiveDmg > 0) {
+          const healed = Math.ceil(effectiveDmg * drainPct / 100);
+          enemy.health = Math.min(enemy.maxHealth, enemy.health + healed);
+        }
         continue;
       }
 
@@ -727,12 +731,12 @@ export class BattleEngine {
         const defenderArmor = target.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
         this._dealDamageToAgent(target,   player, Math.max(0, attackerDmg - defenderArmor), attacker, enemy);
         this._dealDamageToAgent(attacker, enemy,  Math.max(0, defenderDmg - attackerArmor));
-        const corrode = getCorrodeValue(attacker);
-        if (corrode.atk > 0 || corrode.def > 0) {
+        const corrode = getCorrodeValues(attacker);
+        if (corrode.v1 > 0 || corrode.v2 > 0) {
           const stillAlive = player.field.find((c) => c.instanceId === target.instanceId);
           if (stillAlive) {
-            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
-            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.v1);
+            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
           }
         }
         events.push({ type: 'combat', attacker, blocker: target, attackerDmg, blockerDmg: defenderDmg, target: 'agent' });
@@ -745,8 +749,11 @@ export class BattleEngine {
         player.health -= effectiveDmg;
         events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
         this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield + ${breach} breach = ${effectiveDmg}`);
-        const drain = getDrainValue(attacker);
-        if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
+        const drainPct = getDrainPercent(attacker);
+        if (drainPct > 0 && effectiveDmg > 0) {
+          const healed = Math.ceil(effectiveDmg * drainPct / 100);
+          enemy.health = Math.min(enemy.maxHealth, enemy.health + healed);
+        }
       }
     }
 
@@ -800,10 +807,11 @@ export class BattleEngine {
         }
       }
     } else if (attacker && attackerOwner) {
-      // Drain on combat hit (target survived)
-      const drain = getDrainValue(attacker);
-      if (drain > 0) {
-        attackerOwner.health = Math.min(attackerOwner.maxHealth, attackerOwner.health + drain);
+      // Drain on combat hit (target survived) — heal % of damage dealt
+      const drainPct = getDrainPercent(attacker);
+      if (drainPct > 0 && amount > 0) {
+        const healed = Math.ceil(amount * drainPct / 100);
+        attackerOwner.health = Math.min(attackerOwner.maxHealth, attackerOwner.health + healed);
       }
     }
   }

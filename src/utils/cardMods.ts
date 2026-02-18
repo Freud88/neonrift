@@ -2,6 +2,7 @@ import type { Card, AppliedMod, CardMods, ModRarity } from '@/types/card';
 import { MODS, MOD_MAP } from '@/data/mods';
 import type { Mod } from '@/data/mods';
 import { generateCardName } from './nameGenerator';
+import { rollTier as rollTierUtil } from '@/utils/tierUtils';
 
 // ── Rarity from mod count ─────────────────────────────────────────────────────
 
@@ -23,13 +24,12 @@ export const MOD_RARITY_COLOR: Record<ModRarity, string> = {
   mythic:      '#ff2222',
 };
 
-// ── Tier roll (60% T3, 30% T2, 10% T1) ──────────────────────────────────────
+// ── Tier roll (10-tier weighted distribution) ────────────────────────────────
+let _riftLevelForTierRoll = 0;
+export function setRiftLevelForTierRoll(level: number) { _riftLevelForTierRoll = level; }
 
-function rollTier(): 1 | 2 | 3 {
-  const r = Math.random();
-  if (r < 0.10) return 1;
-  if (r < 0.40) return 2;
-  return 3;
+function rollTier(riftLevel?: number): number {
+  return rollTierUtil(riftLevel ?? _riftLevelForTierRoll);
 }
 
 // ── Pick random mods for a card ───────────────────────────────────────────────
@@ -127,26 +127,30 @@ function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
   let costReduction = 0;
   let effectBonus = 0;   // +damage/+heal/+draw from specials like amp_X
   const extraKeywords: { keyword: string; value?: number }[] = [];
+  const degradation = card.mods?.tierDegradation ?? {};
 
   for (const applied of mods) {
     const mod = MOD_MAP[applied.modId];
     if (!mod) continue;
-    const effect = mod.tiers[applied.tier];
+    // Apply tier degradation (temporary, from decay mods)
+    const effectiveTier = Math.max(1, applied.tier - (degradation[applied.modId] ?? 0));
+    if (effectiveTier <= 0) continue; // mod fully degraded
+    const effect = mod.tiers[effectiveTier];
+    if (!effect) continue;
 
     atkBonus      += effect.atkBonus      ?? 0;
     defBonus      += effect.defBonus      ?? 0;
     costReduction += effect.costReduction ?? 0;
 
     // Parse specials that modify effect value (script damage/draw/heal)
-    const sp = effect.special ?? '';
-    if (sp === 'amp_3') effectBonus += 1;
-    if (sp === 'amp_2') effectBonus += 2;
-    if (sp === 'amp_1') effectBonus += 3;
+    if (effect.special === 'amp') {
+      effectBonus += effect.specialValue ?? 0;
+    }
 
     if (effect.keywords) {
       for (const kw of effect.keywords) {
-        // armor/regen get value from tier
-        const val = kw === 'armor' || kw === 'regen' ? (4 - applied.tier) : undefined;
+        // armor/regen get value from specialValue on the ModEffect
+        const val = (kw === 'armor' || kw === 'regen') ? (effect.specialValue ?? 1) : undefined;
         extraKeywords.push({ keyword: kw, value: val });
       }
     }
@@ -231,7 +235,12 @@ export function generateModdedCard(baseCard: Card, modCount: number): Card {
 // ── Helper: how many mods to generate based on enemy difficulty ───────────────
 
 export function modCountForDifficulty(difficulty: number, isBoss: boolean): number {
-  if (isBoss) return 3 + Math.floor(Math.random() * 4);   // 3–6
+  if (isBoss) {
+    // Boss mod count scales with difficulty
+    if (difficulty <= 1) return Math.floor(Math.random() * 2);      // 0–1
+    if (difficulty <= 2) return 1 + Math.floor(Math.random() * 2);  // 1–2
+    return 3 + Math.floor(Math.random() * 4);                       // 3–6
+  }
   if (difficulty >= 4) return 3 + Math.floor(Math.random() * 3); // 3–5
   if (difficulty >= 3) return 1 + Math.floor(Math.random() * 3); // 1–3
   if (difficulty >= 2) return Math.random() < 0.5 ? 1 : 0;       // 0–1

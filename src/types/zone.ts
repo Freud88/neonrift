@@ -38,6 +38,12 @@ export interface ZoneConfig {
   };
 }
 
+// ── Rift Decay clock ─────────────────────────────────────────────────────────
+export interface RiftClock {
+  elapsedMs: number;
+  currentStage: number;  // 0–5
+}
+
 // ── Live zone state (tracked during a zone run) ─────────────────────────────
 export interface ZoneState {
   config: ZoneConfig;
@@ -47,6 +53,8 @@ export interface ZoneState {
   bossDefeated: boolean;
   defeatedEnemyKeys: string[];   // "cx_cy_idx" of killed enemies
   lootedCacheKeys: string[];     // "cx_cy_idx" of opened caches
+  riftClock: RiftClock;
+  activeCorruptions: string[];   // corruption IDs active this zone run
 }
 
 // ── Deck archetypes for procedural enemies ──────────────────────────────────

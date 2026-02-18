@@ -14,6 +14,7 @@ import CardComponent from '@/components/battle/CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
 import { MODS, MOD_MAP } from '@/data/mods';
 import { rarityFromModCount } from '@/utils/cardMods';
+import { MAX_TIER } from '@/utils/tierUtils';
 
 void ENERGY_COLORS;
 
@@ -513,24 +514,24 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         }
         const mods = [...selectedCard.mods.mods];
         const locked = selectedCard.mods.locked;
-        // Find upgradeable mods: not locked AND not already T1
+        // Find upgradeable mods: not locked AND not already at max tier
         const upgradeable = mods
           .map((m, i) => ({ m, i }))
-          .filter(({ m }) => !locked.includes(m.modId) && m.tier > 1);
+          .filter(({ m }) => !locked.includes(m.modId) && m.tier < MAX_TIER);
         if (upgradeable.length === 0) {
           const allLocked = mods.every((m) => locked.includes(m.modId));
-          const allT1 = mods.every((m) => m.tier === 1);
+          const allMax = mods.every((m) => m.tier === MAX_TIER);
           if (allLocked) { msg = 'All mods are locked!'; }
-          else if (allT1) { msg = 'All mods already at T1!'; }
-          else { msg = 'All unlocked mods are already T1!'; }
+          else if (allMax) { msg = `All mods already at T${MAX_TIER}!`; }
+          else { msg = `All unlocked mods are already at T${MAX_TIER}!`; }
           setResult({ msg });
           return;
         }
-        // Pick the worst tier (highest number) to upgrade first
-        const best = upgradeable.reduce((a, b) => a.m.tier > b.m.tier ? a : b);
-        mods[best.i] = { ...mods[best.i], tier: (mods[best.i].tier - 1) as 1 | 2 | 3 };
+        // Pick the lowest tier (weakest) to upgrade first
+        const worst = upgradeable.reduce((a, b) => a.m.tier < b.m.tier ? a : b);
+        mods[worst.i] = { ...mods[worst.i], tier: mods[worst.i].tier + 1 };
         newCard = { ...selectedCard, mods: { ...selectedCard.mods, mods } };
-        msg = `Upgraded ${MOD_MAP[mods[best.i].modId]?.name ?? ''} to Tier ${mods[best.i].tier}`;
+        msg = `Upgraded ${MOD_MAP[mods[worst.i].modId]?.name ?? ''} to T${mods[worst.i].tier}`;
         break;
       }
       case 'quantum_lock': {
@@ -558,7 +559,7 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         const bossMods = MODS.filter((m) => m.isBossMod && m.applicableTo.includes(selectedCard.type) && !existingIds.includes(m.id));
         const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
         if (!pick) { msg = 'No compatible boss mods available for this card!'; setResult({ msg }); return; }
-        const combinedMods = [...existing, { modId: pick.id, tier: 2 as const }];
+        const combinedMods = [...existing, { modId: pick.id, tier: 8 }];
         newCard = {
           ...selectedCard,
           mods: {

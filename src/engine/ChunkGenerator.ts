@@ -25,8 +25,11 @@ export interface ChunkData {
   caches: ChunkCache[];
 }
 
+// Decay stage spawn multipliers: [stable, flickering, unstable, fracturing, collapsing, void breach]
+const DECAY_SPAWN_MULT = [1.0, 1.0, 1.5, 2.0, 3.0, 4.0];
+
 /** Generate a single 16x16 chunk at (cx, cy) for the given zone config. */
-export function generateChunk(cx: number, cy: number, config: ZoneConfig): ChunkData {
+export function generateChunk(cx: number, cy: number, config: ZoneConfig, decayStage: number = 0): ChunkData {
   const seed = `${config.seed}_${cx}_${cy}`;
   const rng = seededRandom(seed);
   const palette = BIOME_PALETTES[config.biome];
@@ -106,11 +109,14 @@ export function generateChunk(cx: number, cy: number, config: ZoneConfig): Chunk
   // 7. Ensure connectivity — flood fill from center, carve paths to any isolated floor
   ensureConnectivity(tiles, mid, mid);
 
-  // 8. Place enemies (0-4 per chunk, not in spawn chunk 0,0)
+  // 8. Place enemies (0-4 per chunk, scaled by decay stage, not in spawn chunk 0,0)
   const enemies: ChunkEnemy[] = [];
   const isSpawnChunk = cx === 0 && cy === 0;
   if (!isSpawnChunk) {
-    const enemyCount = seededInt(0, Math.min(4, 1 + Math.floor(config.level / 2)), rng);
+    const baseMax = Math.min(4, 1 + Math.floor(config.level / 2));
+    const spawnMult = DECAY_SPAWN_MULT[Math.min(decayStage, DECAY_SPAWN_MULT.length - 1)];
+    const scaledMax = Math.min(8, Math.round(baseMax * spawnMult));
+    const enemyCount = seededInt(0, scaledMax, rng);
     for (let i = 0; i < enemyCount; i++) {
       const ex = seededInt(3, CHUNK_SIZE - 4, rng);
       const ey = seededInt(3, CHUNK_SIZE - 4, rng);

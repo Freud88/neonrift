@@ -10,8 +10,7 @@ import CardComponent from '@/components/battle/CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
 import { MOD_MAP } from '@/data/mods';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
-
-const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
+import { TIER_COLORS } from '@/utils/tierUtils';
 
 const ENERGIES: (EnergyType | 'all')[] = ['all', 'volt', 'cipher', 'neutral'];
 const TYPES: (CardType | 'all')[] = ['all', 'agent', 'script', 'malware', 'trap'];
@@ -434,12 +433,15 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
                 {previewCard.mods.mods.map((applied, i) => {
                   const mod = MOD_MAP[applied.modId];
                   if (!mod) return null;
-                  const tier = applied.tier as 1 | 2 | 3;
+                  const tier = applied.tier;
                   const effect = mod.tiers[tier];
+                  if (!effect) return null;
+                  const tierColor = TIER_COLORS[tier] ?? '#aaaaaa';
+                  const tierGlow = tier >= 7 ? `0 0 ${4 + (tier - 7) * 3}px ${tierColor}` : 'none';
                   return (
                     <div key={i} style={{ marginBottom: i < previewCard.mods!.mods.length - 1 ? 5 : 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 7, color: TIER_COLOR[tier], fontWeight: 700, background: 'rgba(255,255,255,0.05)', padding: '1px 3px', borderRadius: 2 }}>
+                        <span style={{ fontSize: 7, color: tierColor, fontWeight: 700, background: 'rgba(255,255,255,0.05)', padding: '1px 3px', borderRadius: 2, textShadow: tierGlow }}>
                           T{tier}
                         </span>
                         <span style={{ fontSize: 8, color: '#e0e0ff', fontWeight: 700 }}>

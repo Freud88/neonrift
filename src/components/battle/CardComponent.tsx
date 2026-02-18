@@ -7,11 +7,8 @@ import type { Card, CardInPlay } from '@/types/card';
 import { ENERGY_COLORS, TYPE_LABEL } from '@/utils/energyColors';
 import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
+import { TIER_COLORS, TIER_NAMES } from '@/utils/tierUtils';
 import CardArt from './CardArt';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
-const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#aaaaaa' };
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
 
@@ -194,12 +191,15 @@ function CardFrame({
             {cardMods.mods.map((applied, i) => {
               const mod = MOD_MAP[applied.modId];
               if (!mod) return null;
-              const tier   = applied.tier as 1 | 2 | 3;
+              const tier   = applied.tier;
               const effect = mod.tiers[tier];
+              if (!effect) return null;
               const isPrefix = mod.type === 'prefix';
               const isBad    = !!(effect.isNegative || effect.isUseless);
               const nameColor = isBad ? '#666677' : isPrefix ? '#00e5ff' : '#dd44ff';
-              const badgeColor = isBad ? '#444455' : TIER_COLOR[tier];
+              const badgeColor = isBad ? '#444455' : (TIER_COLORS[tier] ?? '#aaaaaa');
+              // T7+ glow effect
+              const tierGlow = tier >= 7 ? `0 0 ${4 + (tier - 7) * 3}px ${badgeColor}` : 'none';
               // Shrink text when many mods
               const modFontAdj = modSlots >= 5 ? -0.5 : 0;
 
@@ -214,8 +214,9 @@ function CardFrame({
                       fontWeight: 700,
                       flexShrink: 0,
                       lineHeight: 1.2,
+                      textShadow: tierGlow,
                     }}>
-                      {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
+                      {isBad ? '⚠' : ''}T{tier}
                     </span>
                     {/* mod name */}
                     <span style={{
@@ -375,6 +376,8 @@ export default function CardComponent({
   const modRarity       = cardMods?.modRarity;
   const rarityBorderColor = modRarity && modRarity !== 'common' ? MOD_RARITY_COLOR[modRarity] : null;
   const accentColor     = rarityBorderColor ?? ec.primary;
+  // Highest tier among all mods — for T7+ card glow
+  const maxTier = cardMods?.mods.reduce((max, m) => Math.max(max, m.tier), 0) ?? 0;
 
   const handleMouseEnter = () => {
     hoverTimer.current = setTimeout(() => setHovered(true), 400);
@@ -434,15 +437,17 @@ export default function CardComponent({
             ? `0 0 16px #fff8, 0 0 8px ${accentColor}`
             : attacking
             ? `0 0 14px #ff4444`
+            : maxTier >= 7
+            ? `0 0 ${8 + (maxTier - 7) * 4}px ${TIER_COLORS[maxTier]}88, 0 0 ${14 + (maxTier - 7) * 6}px ${TIER_COLORS[maxTier]}44`
             : rarityBorderColor
             ? `0 0 10px ${rarityBorderColor}66`
             : `0 0 6px ${ec.glow}44`,
+          filter: disabled && !attacking ? 'brightness(0.6)' : maxTier >= 10 ? 'brightness(1.15)' : undefined,
           cursor: disabled ? 'default' : 'pointer',
           userSelect: 'none',
           flexShrink: 0,
           opacity: tapped ? 0.65 : 1,
           transform: tapped ? 'rotate(5deg)' : undefined,
-          filter: disabled && !attacking ? 'brightness(0.6)' : undefined,
         }}
         whileHover={disabled ? {} : { y: size === 'hand' ? -8 : 0, scale: 1.04 }}
         whileTap={disabled ? {} : { scale: 0.96 }}

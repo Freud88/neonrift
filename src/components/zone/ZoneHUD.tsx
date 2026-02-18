@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from 'react';
 import NeonButton from '@/components/ui/NeonButton';
+import RiftClockHUD from './RiftClockHUD';
 import type { ZoneState } from '@/types/zone';
 import type { MapEngine, SpriteEntity } from '@/engine/MapEngine';
 
@@ -12,6 +13,9 @@ interface ZoneHUDProps {
   zoneState: ZoneState;
   engineRef: React.RefObject<MapEngine | null>;
   entitiesRef: React.RefObject<SpriteEntity[]>;
+  riftElapsedMs: number;
+  riftStage: number;
+  riftStageProgress: number;
   onExit: () => void;
   onForgeKey: () => void;
 }
@@ -23,6 +27,9 @@ export default function ZoneHUD({
   zoneState,
   engineRef,
   entitiesRef,
+  riftElapsedMs,
+  riftStage,
+  riftStageProgress,
   onExit,
   onForgeKey,
 }: ZoneHUDProps) {
@@ -102,6 +109,14 @@ export default function ZoneHUD({
             </span>
           )}
         </div>
+
+        {/* Rift Decay clock */}
+        <RiftClockHUD
+          elapsedMs={riftElapsedMs}
+          currentStage={riftStage}
+          stageProgress={riftStageProgress}
+          activeCorruptions={zoneState.activeCorruptions}
+        />
 
         {/* Forge button */}
         {canForge && (

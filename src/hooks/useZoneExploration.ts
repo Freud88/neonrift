@@ -51,6 +51,8 @@ export function useZoneExploration(
   const originRef = useRef({ px: 0, py: 0 });
   // Player world position (persists across chunk rebases)
   const worldPosRef = useRef({ x: 0, y: 0 });
+  // Boss world position (persists across chunk rebases; null = no boss spawned)
+  const bossWorldRef = useRef<{ x: number; y: number } | null>(null);
 
   // ── Input ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -92,7 +94,33 @@ export function useZoneExploration(
     player.y = localPy;
     playerRef.current = player;
 
-    entitiesRef.current = [player, ...zoneEntities];
+    // Preserve boss entity across chunk rebuilds (recalculate local position)
+    const extras: SpriteEntity[] = [];
+    if (bossWorldRef.current) {
+      const existing = entitiesRef.current.find((e) => e.id === 'zone_boss');
+      const bossLocalX = bossWorldRef.current.x - originPx;
+      const bossLocalY = bossWorldRef.current.y - originPy;
+      if (existing) {
+        existing.x = bossLocalX;
+        existing.y = bossLocalY;
+        extras.push(existing);
+      } else {
+        extras.push({
+          id: 'zone_boss',
+          type: 'boss_gate',
+          x: bossLocalX,
+          y: bossLocalY,
+          vx: 0, vy: 0,
+          radius: 18,
+          color: '#ff0044',
+          glowColor: '#ff0044',
+          isBoss: true,
+          label: 'RIFT GATE',
+        });
+      }
+    }
+
+    entitiesRef.current = [player, ...zoneEntities, ...extras];
 
     mgr.pruneDistantChunks(cx, cy, 3);
   }, []);
@@ -222,17 +250,20 @@ export function useZoneExploration(
         }
       }
 
-      // ── Boss AI: always chase player ──────────────────────────────────
+      // ── Boss AI: always chase player, ignores walls (rift entity) ────
       for (const e of entities) {
         if (e.type !== 'boss_gate' || e.defeated) continue;
         const bdx = pl.x - e.x;
         const bdy = pl.y - e.y;
         const bd = Math.hypot(bdx, bdy);
         if (bd > e.radius + pl.radius + 4) {
-          const bnx = e.x + (bdx / bd) * BOSS_CHASE_SPEED;
-          const bny = e.y + (bdy / bd) * BOSS_CHASE_SPEED;
-          if (!engine.circleCollidesWithWalls(bnx, e.y, e.radius)) e.x = bnx;
-          if (!engine.circleCollidesWithWalls(e.x, bny, e.radius)) e.y = bny;
+          e.x += (bdx / bd) * BOSS_CHASE_SPEED;
+          e.y += (bdy / bd) * BOSS_CHASE_SPEED;
+        }
+        // Sync boss world position for chunk rebuild preservation
+        if (bossWorldRef.current) {
+          bossWorldRef.current.x = e.x + originRef.current.px;
+          bossWorldRef.current.y = e.y + originRef.current.py;
         }
       }
 
@@ -316,18 +347,25 @@ export function useZoneExploration(
     lastInteraction.current = Date.now() - CONTACT_COOLDOWN + 1500;
   }, []);
 
-  /** Spawn the zone boss entity 2 chunks away from the player. */
+  /** Spawn the zone boss entity nearby in a random direction from the player. */
   const spawnBoss = useCallback(() => {
     const pl = playerRef.current;
     if (!pl) return;
-    // Spawn boss 2 chunks (32 tiles) to the right and 1 chunk down from player
-    const bossX = pl.x + CHUNK_SIZE * TILE_SIZE * 2;
-    const bossY = pl.y + CHUNK_SIZE * TILE_SIZE;
+    // Spawn boss ~6-8 tiles away in a random direction (visible on screen)
+    const angle = Math.random() * Math.PI * 2;
+    const dist = TILE_SIZE * (6 + Math.random() * 2);
+    const bossLocalX = pl.x + Math.cos(angle) * dist;
+    const bossLocalY = pl.y + Math.sin(angle) * dist;
+    // Store world position for persistence across chunk rebuilds
+    bossWorldRef.current = {
+      x: bossLocalX + originRef.current.px,
+      y: bossLocalY + originRef.current.py,
+    };
     const boss: SpriteEntity = {
       id: 'zone_boss',
       type: 'boss_gate',
-      x: bossX,
-      y: bossY,
+      x: bossLocalX,
+      y: bossLocalY,
       vx: 0,
       vy: 0,
       radius: 18,
@@ -344,5 +382,5 @@ export function useZoneExploration(
     if (e) e.defeated = true;
   }, []);
 
-  return { engineRef, entitiesRef, markEnemyDefeated, markCacheLooted, resetContactCooldown, spawnBoss, markBossDefeated };
+  return { engineRef, chunkMgrRef, entitiesRef, markEnemyDefeated, markCacheLooted, resetContactCooldown, spawnBoss, markBossDefeated };
 }

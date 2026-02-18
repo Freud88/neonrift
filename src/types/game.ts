@@ -60,6 +60,7 @@ export interface GameState {
   inventory: CraftingItem[];
   progress: GameProgress;
   settings: GameSettings;
+  _tierVersion?: number; // 2 = 10-tier system
 }
 
 export type DistrictId = 'neon_row' | 'chrome_heights' | 'the_sprawl' | 'synth_garden' | 'core_nexus';

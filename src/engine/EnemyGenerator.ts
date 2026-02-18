@@ -37,11 +37,16 @@ const SPRITE_COLORS = [
   '#aa00ff', '#00aaff', '#44ff88', '#ff6644',
 ];
 
+// Decay stage stat multipliers for ATK and DEF
+const DECAY_ATK_MULT = [1.0, 1.0, 1.1, 1.2, 1.4, 1.6];
+const DECAY_DEF_MULT = [1.0, 1.0, 1.05, 1.1, 1.2, 1.3];
+
 /** Generate a procedural enemy profile from a seed and zone configuration. */
 export function generateEnemyProfile(
   seed: string,
   config: ZoneConfig,
   isBoss: boolean = false,
+  decayStage: number = 0,
 ): EnemyProfile {
   const rng = seededRandom(seed);
   const level = config.level;
@@ -59,15 +64,17 @@ export function generateEnemyProfile(
   const archetype = seededPick(ARCHETYPES, rng);
   const aiType: AIType = isBoss ? 'boss' : ARCHETYPE_AI[archetype];
 
-  // Stats
-  const baseHealth = isBoss ? 20 : 12;
-  const health = Math.round(baseHealth * scaling.healthMultiplier);
-  const difficulty: 1 | 2 | 3 = isBoss ? 3 : (level <= 3 ? 1 : level <= 6 ? 2 : 3);
+  // Stats (scaled by decay stage, reduced for early levels)
+  const dStage = Math.min(decayStage, DECAY_ATK_MULT.length - 1);
+  const earlyHealthScale = level <= 2 ? 0.65 : level <= 4 ? 0.8 : 1.0;
+  const baseHealth = isBoss ? (level <= 2 ? 15 : 20) : (level <= 2 ? 8 : 12);
+  const health = Math.round(baseHealth * scaling.healthMultiplier * DECAY_DEF_MULT[dStage] * earlyHealthScale);
+  const difficulty: 1 | 2 | 3 = isBoss ? (level <= 2 ? 1 : 3) : (level <= 3 ? 1 : level <= 6 ? 2 : 3);
 
-  // Deck building
-  const deckSize = isBoss ? 25 : 20;
+  // Deck building (smaller decks for early levels)
+  const deckSize = isBoss ? (level <= 2 ? 18 : 25) : (level <= 2 ? 15 : 20);
   const energyBias = ARCHETYPE_ENERGY_BIAS[archetype];
-  const deck = buildDeck(deckSize, energyBias, archetype, rng);
+  const deck = buildDeck(deckSize, energyBias, archetype, rng, level);
 
   // Rewards
   const baseCredits = isBoss ? 50 : 15;
@@ -108,12 +115,16 @@ function buildDeck(
   energyBias: 'volt' | 'cipher' | null,
   archetype: DeckArchetype,
   rng: () => number,
+  level: number = 99,
 ): string[] {
-  // Filter cards by energy type preference
+  // Filter cards by energy type preference and rarity for early levels
   const pool = CARDS.filter((c) => {
     if (energyBias) {
-      return c.energy === energyBias || c.energy === 'neutral';
+      if (c.energy !== energyBias && c.energy !== 'neutral') return false;
     }
+    // Early levels: only common cards (no uncommon/rare powerhouses)
+    if (level <= 3 && c.rarity !== 'common') return false;
+    if (level <= 5 && c.rarity === 'rare') return false;
     return true;
   });
 

@@ -5,6 +5,7 @@ import type { GameState, GameScene, GameSettings, CraftingItemId } from '@/types
 import type { Card } from '@/types/card';
 import type { ZoneState, ZoneConfig, BiomeId } from '@/types/zone';
 import { STARTER_DECK } from '@/data/cards';
+import { migrateOldTier } from '@/utils/tierUtils';
 
 // ── Zone helpers ──────────────────────────────────────────────────────────────
 const BIOME_ORDER: BiomeId[] = [
@@ -13,24 +14,26 @@ const BIOME_ORDER: BiomeId[] = [
 ];
 
 function buildZoneConfig(level: number): ZoneConfig {
+  // Early levels (1-5) use gentler scaling so the starter deck can survive
+  const earlyMult = level <= 5 ? 0.5 + level * 0.1 : 1; // 0.6, 0.7, 0.8, 0.9, 1.0
   return {
     level,
     seed: `zone_${level}_${Date.now().toString(36)}`,
     biome: BIOME_ORDER[(level - 1) % BIOME_ORDER.length],
-    shardsRequired: Math.min(15, 3 + Math.floor(level / 3)),
+    shardsRequired: level <= 2 ? 2 : Math.min(15, 3 + Math.floor(level / 3)),
     enemyScaling: {
-      atkMultiplier: 1 + (level - 1) * 0.15,
-      defMultiplier: 1 + (level - 1) * 0.12,
-      healthMultiplier: 1 + (level - 1) * 0.2,
-      modCountMin: Math.min(Math.floor(level / 3), 5),
-      modCountMax: Math.min(1 + Math.floor(level / 2), 6),
+      atkMultiplier: earlyMult * (1 + (level - 1) * 0.15),
+      defMultiplier: earlyMult * (1 + (level - 1) * 0.12),
+      healthMultiplier: earlyMult * (1 + (level - 1) * 0.2),
+      modCountMin: level <= 4 ? 0 : Math.min(Math.floor(level / 3), 5),
+      modCountMax: level <= 2 ? 0 : level <= 4 ? 1 : Math.min(1 + Math.floor(level / 2), 6),
     },
     bossScaling: {
-      atkMultiplier: 1.5 + (level - 1) * 0.2,
-      defMultiplier: 1.5 + (level - 1) * 0.15,
-      healthMultiplier: 1.5 + (level - 1) * 0.3,
-      modCountMin: Math.min(1 + Math.floor(level / 2), 6),
-      modCountMax: 6,
+      atkMultiplier: (level <= 3 ? 1.0 : 1.5) + (level - 1) * 0.2,
+      defMultiplier: (level <= 3 ? 1.0 : 1.5) + (level - 1) * 0.15,
+      healthMultiplier: (level <= 3 ? 1.0 : 1.5) + (level - 1) * 0.3,
+      modCountMin: level <= 2 ? 0 : Math.min(1 + Math.floor(level / 2), 6),
+      modCountMax: level <= 2 ? 1 : 6,
     },
   };
 }
@@ -138,6 +141,22 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       if (saved.progress && saved.progress.maxZoneLevel === undefined) {
         saved.progress.maxZoneLevel = 1;
         saved.progress.zonesCompleted = 0;
+      }
+      // Migrate old 3-tier mods to 10-tier system
+      if (!saved._tierVersion || saved._tierVersion < 2) {
+        const migrateCardTiers = (card: Card): Card => {
+          if (!card.mods?.mods?.length) return card;
+          const migratedMods = card.mods.mods.map((m) => ({
+            ...m,
+            tier: migrateOldTier(m.tier),
+          }));
+          return { ...card, mods: { ...card.mods, mods: migratedMods } };
+        };
+        saved.deck = saved.deck.map(migrateCardTiers);
+        saved.collection = saved.collection.map(migrateCardTiers);
+        saved._tierVersion = 2;
+        // Re-save with migrated tiers
+        localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
       }
       // Restore active zone if one was in progress
       let restoredZone = null;
@@ -386,12 +405,31 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       bossDefeated: false,
       defeatedEnemyKeys: [],
       lootedCacheKeys: [],
+      riftClock: { elapsedMs: 0, currentStage: 0 },
+      activeCorruptions: [],
     };
     set({ activeZone: zone, currentScene: 'zone' });
   },
 
   exitZone: () => {
-    set({ activeZone: null, currentScene: 'city_hub' });
+    // Clear temporary tier degradation from all cards
+    set((state) => {
+      if (!state.gameState) return { activeZone: null, currentScene: 'city_hub' as const };
+      const cleanCard = (c: Card): Card => {
+        if (!c.mods?.tierDegradation) return c;
+        const { tierDegradation: _, ...cleanMods } = c.mods;
+        return { ...c, mods: cleanMods as Card['mods'] };
+      };
+      return {
+        activeZone: null,
+        currentScene: 'city_hub' as const,
+        gameState: {
+          ...state.gameState,
+          deck: state.gameState.deck.map(cleanCard),
+          collection: state.gameState.collection.map(cleanCard),
+        },
+      };
+    });
     get().saveGame();
   },
 

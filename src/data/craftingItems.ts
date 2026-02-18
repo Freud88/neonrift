@@ -38,7 +38,7 @@ export const CRAFTING_ITEMS: Record<CraftingItemId, CraftingItemDef> = {
   tier_boost: {
     id: 'tier_boost',
     name: 'Tier Boost',
-    description: 'Upgrade one existing mod on a card to the next tier (T3→T2→T1).',
+    description: 'Upgrade one existing mod on a card to the next tier (higher tier = stronger).',
     color: '#ffe600',
     icon: '▲',
     dropWeight: 10,

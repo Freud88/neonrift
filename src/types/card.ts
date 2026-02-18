@@ -8,7 +8,7 @@ export type ModRarity = 'common' | 'coded' | 'enhanced' | 'overclocked' | 'corru
 
 export interface AppliedMod {
   modId: string;    // references MODS[id]
-  tier: 1 | 2 | 3;
+  tier: number; // 1 (weakest/Faded) to 10 (strongest/Perfect)
 }
 
 // A card that has been randomized with mods. All optional so base cards still work.
@@ -17,6 +17,7 @@ export interface CardMods {
   modRarity: ModRarity;
   displayName: string;          // e.g. "Ionized Shock Trooper of Stealth"
   locked: string[];             // modIds locked by Quantum Lock
+  tierDegradation?: Record<string, number>; // modId → tiers lost (temporary, cleared on zone exit)
 }
 
 export interface CardEffect {
