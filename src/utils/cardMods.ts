@@ -125,6 +125,7 @@ function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
   let atkBonus = 0;
   let defBonus = 0;
   let costReduction = 0;
+  let effectBonus = 0;   // +damage/+heal/+draw from specials like amp_X
   const extraKeywords: { keyword: string; value?: number }[] = [];
 
   for (const applied of mods) {
@@ -135,6 +136,12 @@ function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
     atkBonus      += effect.atkBonus      ?? 0;
     defBonus      += effect.defBonus      ?? 0;
     costReduction += effect.costReduction ?? 0;
+
+    // Parse specials that modify effect value (script damage/draw/heal)
+    const sp = effect.special ?? '';
+    if (sp === 'amp_3') effectBonus += 1;
+    if (sp === 'amp_2') effectBonus += 2;
+    if (sp === 'amp_1') effectBonus += 3;
 
     if (effect.keywords) {
       for (const kw of effect.keywords) {
@@ -158,12 +165,24 @@ function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
     }
   }
 
-  return {
+  const result: Partial<Card> = {
     cost: newCost,
     ...(card.attack  !== undefined ? { attack:  newAtk } : {}),
     ...(card.defense !== undefined ? { defense: newDef } : {}),
     ...(merged.length > 0 ? { keywords: merged } : {}),
   };
+
+  // Bake effect bonus into card's effect value (scripts: damage, heal, draw)
+  if (card.effect && effectBonus > 0) {
+    const baseVal = card.effect.value ?? 0;
+    const newVal = baseVal + effectBonus;
+    const newDesc = card.effect.description.replace(String(baseVal), String(newVal));
+    result.effect = { ...card.effect, value: newVal, description: newDesc };
+    // Also update main description
+    result.description = card.description.replace(String(baseVal), String(newVal));
+  }
+
+  return result;
 }
 
 // ── Assign a random art index to any card (call when adding to shop/deck) ─────

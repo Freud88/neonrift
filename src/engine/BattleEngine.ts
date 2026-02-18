@@ -76,18 +76,6 @@ function getShieldValue(card: CardInPlay): number {
   return 0;
 }
 
-// Returns amp bonus for scripts
-function getAmpBonus(card: CardInPlay): number {
-  for (const applied of card.card.mods?.mods ?? []) {
-    const mod = MOD_MAP[applied.modId];
-    const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'amp_3') return 1;
-    if (sp === 'amp_2') return 2;
-    if (sp === 'amp_1') return 3;
-  }
-  return 0;
-}
-
 // Returns siphon heal bonus for scripts
 function getSiphonValue(card: CardInPlay): number {
   for (const applied of card.card.mods?.mods ?? []) {
@@ -100,14 +88,14 @@ function getSiphonValue(card: CardInPlay): number {
   return 0;
 }
 
-// Returns disrupt bypass factor for scripts (0 = no bypass, 1 = full bypass)
+// Returns shield bypass factor for scripts (0 = no bypass, 1 = full bypass)
 function getDisruptValue(card: CardInPlay): number {
   for (const applied of card.card.mods?.mods ?? []) {
     const mod = MOD_MAP[applied.modId];
     const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'disrupt_3') return 0.3;
-    if (sp === 'disrupt_2') return 0.5;
-    if (sp === 'disrupt_1') return 1.0;
+    if (sp === 'shieldbypass_3') return 0.3;
+    if (sp === 'shieldbypass_2') return 0.5;
+    if (sp === 'shieldbypass_1') return 1.0;
   }
   return 0;
 }
@@ -117,9 +105,9 @@ function getBreachValue(card: CardInPlay): number {
   for (const applied of card.card.mods?.mods ?? []) {
     const mod = MOD_MAP[applied.modId];
     const sp = mod?.tiers[applied.tier]?.special ?? '';
-    if (sp === 'breach_3') return 1;
-    if (sp === 'breach_2') return 2;
-    if (sp === 'breach_1') return 3;
+    if (sp === 'truedmg_3') return 1;
+    if (sp === 'truedmg_2') return 2;
+    if (sp === 'truedmg_1') return 3;
   }
   return 0;
 }
@@ -409,11 +397,10 @@ export class BattleEngine {
     const effect = inPlay.card.effect;
     if (!effect) return;
 
-    const amp = getAmpBonus(inPlay);
     const siphon = getSiphonValue(inPlay);
 
     if (effect.type === 'damage') {
-      const dmg = (effect.value ?? 0) + amp;
+      const dmg = effect.value ?? 0;  // amp bonus already baked into effect.value by mod system
       if (effect.target === 'any' && targetId) {
         const t = opponent.field.find((c) => c.instanceId === targetId);
         if (t) { this._dealDamageToAgent(t, opponent, dmg); }

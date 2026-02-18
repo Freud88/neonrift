@@ -177,7 +177,12 @@ export default function GamePage() {
         setShowDistrictVictory(true);
       }, 300);
     } else {
-      const back = (zoneBattleKey || isBossBattle) ? 'zone_exploration' : 'city_hub';
+      // Dying in a zone = zone failed, return to hub
+      const wasInZone = !!(zoneBattleKey || isBossBattle);
+      if (wasInZone && result === 'lose') {
+        exitZone();
+      }
+      const back = wasInZone && result === 'lose' ? 'city_hub' : (zoneBattleKey || isBossBattle) ? 'zone_exploration' : 'city_hub';
       setTimeout(() => {
         setScreen(back);
         setScene(back === 'zone_exploration' ? 'zone' : 'city_hub');
@@ -188,7 +193,7 @@ export default function GamePage() {
         saveGame();
       }, 300);
     }
-  }, [setScene, saveGame, pendingBattle, zoneBattleKey, zoneBattleProfile, isBossBattle, markZoneEnemyDefeated, collectShard, defeatZoneBoss]);
+  }, [setScene, saveGame, pendingBattle, zoneBattleKey, zoneBattleProfile, isBossBattle, markZoneEnemyDefeated, collectShard, defeatZoneBoss, exitZone]);
 
   const handleBackToHub = useCallback(() => {
     setScreen('city_hub');

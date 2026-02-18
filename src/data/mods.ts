@@ -821,19 +821,19 @@ export const MODS: Mod[] = [
 
   // ── Shield bypass ────────────────────────────────────────────────────
   {
-    id: 'P11', name: 'Disrupting', type: 'prefix', applicableTo: ['script'], weight: 60,
+    id: 'P43', name: 'Disrupting', type: 'prefix', applicableTo: ['script'], weight: 60,
     tiers: {
-      3: { description: 'Damage bypasses 30% of shield', special: 'disrupt_3' },
-      2: { description: 'Damage bypasses 50% of shield', special: 'disrupt_2' },
-      1: { description: 'Damage bypasses all shield (direct hit)', special: 'disrupt_1' },
+      3: { description: 'Damage bypasses 30% of shield', special: 'shieldbypass_3' },
+      2: { description: 'Damage bypasses 50% of shield', special: 'shieldbypass_2' },
+      1: { description: 'Damage bypasses all shield (direct hit)', special: 'shieldbypass_1' },
     },
   },
   {
-    id: 'P12', name: 'Breaching', type: 'prefix', applicableTo: ['agent'], weight: 50,
+    id: 'P44', name: 'Breaching', type: 'prefix', applicableTo: ['agent'], weight: 50,
     tiers: {
-      3: { description: 'Direct attacks deal +1 bonus true damage (ignores shield)', special: 'breach_3' },
-      2: { description: 'Direct attacks deal +2 bonus true damage (ignores shield)', special: 'breach_2' },
-      1: { description: 'Direct attacks deal +3 bonus true damage (ignores shield)', special: 'breach_1' },
+      3: { description: 'Direct attacks deal +1 bonus true damage (ignores shield)', special: 'truedmg_3' },
+      2: { description: 'Direct attacks deal +2 bonus true damage (ignores shield)', special: 'truedmg_2' },
+      1: { description: 'Direct attacks deal +3 bonus true damage (ignores shield)', special: 'truedmg_1' },
     },
   },
 
