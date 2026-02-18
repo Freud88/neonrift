@@ -299,7 +299,7 @@ export default function GamePage() {
       {/* City Hub — always mounted, hidden during overlays */}
       <div
         className="absolute inset-0"
-        style={{ visibility: screen === 'city_hub' ? 'visible' : 'hidden' }}
+        style={{ display: screen === 'city_hub' ? 'block' : 'none' }}
       >
         <ExplorationView
           mapData={CITY_HUB_MAP}
