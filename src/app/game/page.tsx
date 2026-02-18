@@ -20,6 +20,7 @@ import LootCachePopup from '@/components/zone/LootCachePopup';
 import TutorialOverlay from '@/components/ui/TutorialOverlay';
 import DistrictVictory from '@/components/ui/DistrictVictory';
 import SettingsModal from '@/components/ui/SettingsModal';
+import SkillTreePanel from '@/components/skills/SkillTreePanel';
 
 // ── Glitch transition overlay ─────────────────────────────────────────────────
 function GlitchTransition({ show }: { show: boolean }) {
@@ -70,7 +71,8 @@ type Screen =
   | 'battle'
   | 'shop'
   | 'deckbuilder'
-  | 'crafting';
+  | 'crafting'
+  | 'skills';
 
 export default function GamePage() {
   const router = useRouter();
@@ -371,6 +373,13 @@ export default function GamePage() {
         </div>
       )}
 
+      {/* Skill Tree Panel */}
+      {screen === 'skills' && (
+        <div className="absolute inset-0" style={{ zIndex: 30 }}>
+          <SkillTreePanel onClose={handleBackToHub} />
+        </div>
+      )}
+
       {/* Glitch transition */}
       <GlitchTransition show={glitchShow} />
 
@@ -407,27 +416,49 @@ export default function GamePage() {
         />
       )}
 
-      {/* Settings button (city hub / zone) */}
+      {/* Settings + Skills buttons (city hub / zone) */}
       {(screen === 'city_hub' || screen === 'zone_exploration') && (
-        <button
-          onClick={() => setShowSettings(true)}
-          style={{
-            position: 'fixed',
-            top: 12,
-            right: screen === 'zone_exploration' ? 160 : 12,
-            zIndex: 50,
-            background: 'rgba(5,5,20,0.8)',
-            border: '1px solid rgba(0,240,255,0.25)',
-            color: 'rgba(0,240,255,0.6)',
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 10,
-            padding: '5px 10px',
-            cursor: 'pointer',
-            letterSpacing: '0.1em',
-          }}
-        >
-          ⚙ MENU
-        </button>
+        <>
+          <button
+            onClick={() => setShowSettings(true)}
+            style={{
+              position: 'fixed',
+              top: 12,
+              right: screen === 'zone_exploration' ? 160 : 12,
+              zIndex: 50,
+              background: 'rgba(5,5,20,0.8)',
+              border: '1px solid rgba(0,240,255,0.25)',
+              color: 'rgba(0,240,255,0.6)',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 10,
+              padding: '5px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.1em',
+            }}
+          >
+            ⚙ MENU
+          </button>
+          <button
+            onClick={() => setScreen('skills')}
+            style={{
+              position: 'fixed',
+              top: 12,
+              right: screen === 'zone_exploration' ? 230 : 82,
+              zIndex: 50,
+              background: 'rgba(5,5,20,0.8)',
+              border: `1px solid ${(gameState?.skills?.skillPoints ?? 0) > 0 ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.25)'}`,
+              color: (gameState?.skills?.skillPoints ?? 0) > 0 ? '#00f0ff' : 'rgba(0,240,255,0.6)',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 10,
+              padding: '5px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.1em',
+              textShadow: (gameState?.skills?.skillPoints ?? 0) > 0 ? '0 0 8px #00f0ff' : 'none',
+            }}
+          >
+            ★ SKILLS{(gameState?.skills?.skillPoints ?? 0) > 0 ? ` (${gameState!.skills!.skillPoints})` : ''}
+          </button>
+        </>
       )}
 
       {/* Settings modal */}

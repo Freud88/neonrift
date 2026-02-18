@@ -1,4 +1,5 @@
 import type { Card } from './card';
+import type { PlayerSkills } from './skills';
 
 export type GameScene =
   | 'title' | 'exploration' | 'battle' | 'battle_rewards'
@@ -61,6 +62,7 @@ export interface GameState {
   inventory: CraftingItem[];
   progress: GameProgress;
   settings: GameSettings;
+  skills?: PlayerSkills;
   _tierVersion?: number; // 2 = 10-tier system
 }
 

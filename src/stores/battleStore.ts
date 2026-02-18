@@ -9,6 +9,7 @@ import { applyModStats } from '@/utils/cardMods';
 import type { EnemyProfile } from '@/types/enemy';
 import type { Card, CardInPlay } from '@/types/card';
 import type { AIType } from '@/types/enemy';
+import { useGameStore } from '@/stores/gameStore';
 
 interface DamageNumber {
   id: string;
@@ -80,7 +81,8 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       return { ...base, ...applyModStats(base, card.mods.mods), mods: card.mods, uniqueId: card.uniqueId, artIndex: card.artIndex };
     });
 
-    const engine = new BattleEngine(bakedDeck, enemyCards, enemyProfileId, profile.health, decayStage, activeCorruptions);
+    const playerSkills = useGameStore.getState().gameState?.skills ?? null;
+    const engine = new BattleEngine(bakedDeck, enemyCards, enemyProfileId, profile.health, decayStage, activeCorruptions, playerSkills);
     const ai     = new AIEngine(engine, profile.aiType as AIType);
 
     set({

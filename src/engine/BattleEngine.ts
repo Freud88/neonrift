@@ -1,5 +1,6 @@
 import type { Card, CardInPlay } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
+import type { PlayerSkills, SkillTreeId } from '@/types/skills';
 import { generateModdedCard, modCountForDifficulty } from '@/utils/cardMods';
 import { ENEMIES } from '@/data/enemies';
 import { rollCraftingDrop } from '@/data/craftingItems';
@@ -139,6 +140,12 @@ export class BattleEngine {
   private state: BattleState;
   private decayStage: number;
   private activeCorruptions: string[];
+  private playerSkills: PlayerSkills | null;
+
+  /** Helper: check if player has a skill at minimum level. */
+  private _hasSkill(tree: SkillTreeId, minLevel: number): boolean {
+    return (this.playerSkills?.trees[tree] ?? 0) >= minLevel;
+  }
 
   constructor(
     playerDeck: Card[],
@@ -147,12 +154,20 @@ export class BattleEngine {
     enemyHealth = 20,
     decayStage = 0,
     activeCorruptions: string[] = [],
+    playerSkills: PlayerSkills | null = null,
   ) {
     this.decayStage = decayStage;
     this.activeCorruptions = activeCorruptions;
+    this.playerSkills = playerSkills;
 
     const playerShuffled = shuffle(playerDeck);
     const enemyShuffled  = shuffle(enemyDeck);
+
+    // Survivor Lv.1: +1 starting HP
+    const bonusHp = this._hasSkill('survivor', 1) ? 1 : 0;
+    // Survivor Lv.9: +2 max HP
+    const extraMaxHp = this._hasSkill('survivor', 9) ? 2 : 0;
+    const totalPlayerHp = 20 + bonusHp + extraMaxHp;
 
     const mkCombatant = (deck: Card[], health: number): CombatantState => ({
       health,
@@ -171,7 +186,7 @@ export class BattleEngine {
       phase: 'mulligan',
       turnPhase: 'draw',
       turnNumber: 0,
-      player: mkCombatant(playerShuffled, 20),
+      player: mkCombatant(playerShuffled, totalPlayerHp),
       enemy: mkCombatant(enemyShuffled, enemyHealth),
       enemyProfileId,
       attackers: [],
@@ -182,6 +197,12 @@ export class BattleEngine {
       pendingFork: null,
       decayEvents: [],
     };
+
+    // Survivor Lv.3: +1 starting data cell
+    if (this._hasSkill('survivor', 3)) {
+      this.state.player.maxDataCells += 1;
+      this.state.player.currentDataCells += 1;
+    }
 
     // ── Apply corruption: junk injection ────────────────────────────────────
     let totalJunk = 0;
@@ -228,7 +249,9 @@ export class BattleEngine {
       const c = CORRUPTION_MAP[cid];
       if (c?.effect.type === 'starting_hand_reduce') handReduce += c.effect.value;
     }
-    const openingHandSize = Math.max(1, 4 - handReduce);
+    // Survivor Lv.2: +1 starting hand card
+    const extraStartCards = this._hasSkill('survivor', 2) ? 1 : 0;
+    const openingHandSize = Math.max(1, 4 - handReduce + extraStartCards);
     this._drawCards(this.state.player, openingHandSize);
     this._drawCards(this.state.enemy, 4);
   }

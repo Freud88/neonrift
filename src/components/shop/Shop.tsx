@@ -25,14 +25,18 @@ const DEALER_LINES = [
   "Everything's for sale if you got the coin.",
 ];
 
-function cardPrice(card: Card): number {
+function cardBasePrice(card: Card): number {
   if (card.cost <= 2) return 30 + card.cost * 10;
   if (card.cost <= 4) return 80 + card.cost * 10;
   return 150 + card.cost * 15;
 }
 
-function sellPrice(card: Card): number {
-  return Math.floor(cardPrice(card) * 0.3);
+function cardPrice(card: Card, shopDiscount = 0): number {
+  return Math.max(1, Math.floor(cardBasePrice(card) * (1 - shopDiscount)));
+}
+
+function sellPrice(card: Card, sellBonus = 0): number {
+  return Math.floor(cardBasePrice(card) * (0.3 + sellBonus));
 }
 
 const PACK_PRICE = 0;
@@ -66,6 +70,11 @@ export default function Shop({ onClose }: ShopProps) {
   const credits    = gameState?.player.credits ?? 0;
   const collection = gameState?.collection ?? [];
   const deck       = gameState?.deck ?? [];
+
+  // Trader skill bonuses
+  const traderLevel = gameState?.skills?.trees.trader ?? 0;
+  const shopDiscount = traderLevel >= 1 ? 0.10 : 0;  // Trader Lv.1: -10% prices
+  const sellBonus    = traderLevel >= 4 ? 0.25 : 0;   // Trader Lv.4: +25% sell price
 
   const [tab, setTab] = useState<'buy' | 'sell' | 'items'>('buy');
   const [dealerLine] = useState(() => DEALER_LINES[Math.floor(Math.random() * DEALER_LINES.length)]);
@@ -104,7 +113,7 @@ export default function Shop({ onClose }: ShopProps) {
   const handleRefresh = () => setRefreshKey((k) => k + 1);
 
   const handleBuy = (card: Card) => {
-    const price = cardPrice(card);
+    const price = cardPrice(card, shopDiscount);
     if (credits < price) return;
     const ok = spendCredits(price);
     if (ok) {
@@ -141,7 +150,7 @@ export default function Shop({ onClose }: ShopProps) {
       const coll = [...s.gameState.collection];
       const idx  = coll.findIndex((c) => cardKey(c) === key);
       if (idx !== -1) coll.splice(idx, 1);
-      return { gameState: { ...s.gameState, collection: coll, player: { ...s.gameState.player, credits: s.gameState.player.credits + sellPrice(card) } } };
+      return { gameState: { ...s.gameState, collection: coll, player: { ...s.gameState.player, credits: s.gameState.player.credits + sellPrice(card, sellBonus) } } };
     });
     useGameStore.getState().saveGame();
     setSellFlash(card.id + index);
@@ -270,7 +279,7 @@ export default function Shop({ onClose }: ShopProps) {
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {inventory.map((card) => {
-                const price    = cardPrice(card);
+                const price    = cardPrice(card, shopDiscount);
                 const canBuy   = credits >= price;
                 const flashKey = card.uniqueId ?? card.id;
                 const justBought = buyFlash === flashKey;
@@ -321,7 +330,7 @@ export default function Shop({ onClose }: ShopProps) {
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {uniqueCollection.map((card, i) => {
-                const price   = sellPrice(card);
+                const price   = sellPrice(card, sellBonus);
                 const inDeck  = deck.filter((c) => c.id === card.id).length;
                 const owned   = collection.filter((c) => c.id === card.id).length;
                 const canSell = owned > inDeck;

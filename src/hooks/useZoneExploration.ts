@@ -6,6 +6,7 @@ import { ChunkManager } from '@/engine/ChunkManager';
 import { CHUNK_SIZE } from '@/engine/ChunkGenerator';
 import type { ZoneConfig } from '@/types/zone';
 import type { ZoneState } from '@/types/zone';
+import { useGameStore } from '@/stores/gameStore';
 
 const TILE_SIZE = 32;
 const PLAYER_SPEED = 2.4;
@@ -186,8 +187,11 @@ export function useZoneExploration(
       const len = Math.sqrt(dx * dx + dy * dy);
       if (len > 1) { dx /= len; dy /= len; }
 
-      const nx = pl.x + dx * PLAYER_SPEED;
-      const ny = pl.y + dy * PLAYER_SPEED;
+      // Drifter Lv.2: +10% movement speed
+      const drifterLevel = useGameStore.getState().gameState?.skills?.trees.drifter ?? 0;
+      const speed = PLAYER_SPEED * (drifterLevel >= 2 ? 1.10 : 1);
+      const nx = pl.x + dx * speed;
+      const ny = pl.y + dy * speed;
 
       if (!engine.circleCollidesWithWalls(nx, pl.y, pl.radius)) pl.x = nx;
       if (!engine.circleCollidesWithWalls(pl.x, ny, pl.radius)) pl.y = ny;

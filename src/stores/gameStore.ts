@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { GameState, GameScene, GameSettings, CraftingItemId } from '@/types/game';
 import type { Card } from '@/types/card';
 import type { ZoneState, ZoneConfig, BiomeId } from '@/types/zone';
+import type { SkillTreeId, PlayerSkills } from '@/types/skills';
 import { STARTER_DECK } from '@/data/cards';
 import { migrateOldTier } from '@/utils/tierUtils';
 import { generateRiftName } from '@/utils/riftNameGenerator';
@@ -11,7 +12,7 @@ import { generateRiftName } from '@/utils/riftNameGenerator';
 // ── XP / Level helpers ────────────────────────────────────────────────────────
 /** XP needed to reach level N (cumulative). Level 1 = 0 XP. */
 function xpForLevel(level: number): number {
-  return level <= 1 ? 0 : (level - 1) * 100;
+  return level <= 1 ? 0 : Math.floor(100 * Math.pow(level - 1, 1.4));
 }
 
 /** Compute the player level from total XP earned. */
@@ -89,6 +90,7 @@ const defaultGameState: GameState = {
     zonesCompleted: 0,
   },
   settings: defaultSettings,
+  skills: { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } },
 };
 
 interface GameStoreState {
@@ -116,6 +118,11 @@ interface GameStoreState {
   checkHasSave: () => void;
   addCraftingItem: (itemId: CraftingItemId, qty?: number) => void;
   removeCraftingItem: (itemId: CraftingItemId, qty?: number) => boolean;
+
+  // Skill actions
+  allocateSkillPoint: (tree: SkillTreeId) => boolean;
+  getSkillLevel: (tree: SkillTreeId) => number;
+  hasSkill: (tree: SkillTreeId, minLevel: number) => boolean;
 
   // Zone actions
   enterZone: (level: number) => void;
@@ -158,6 +165,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       if (saved.progress && saved.progress.maxZoneLevel === undefined) {
         saved.progress.maxZoneLevel = 1;
         saved.progress.zonesCompleted = 0;
+      }
+      // Ensure skills exist in old saves
+      if (!saved.skills) {
+        saved.skills = { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } };
       }
       // Migrate old 3-tier mods to 10-tier system
       if (!saved._tierVersion || saved._tierVersion < 2) {
@@ -267,8 +278,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   defeatEnemy: (enemyId, credits, xp) => {
     set((state) => {
       if (!state.gameState) return state;
+      const oldLevel = state.gameState.player.level;
       const newXp = state.gameState.player.xp + xp;
       const newLevel = levelFromXp(newXp);
+      const levelsGained = newLevel - oldLevel;
+      const skills = state.gameState.skills ?? { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } };
+      const updatedSkills: PlayerSkills = levelsGained > 0
+        ? { ...skills, skillPoints: skills.skillPoints + levelsGained }
+        : skills;
       return {
         gameState: {
           ...state.gameState,
@@ -278,6 +295,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             xp: newXp,
             level: newLevel,
           },
+          skills: updatedSkills,
           progress: {
             ...state.gameState.progress,
             defeatedEnemies: [...state.gameState.progress.defeatedEnemies, enemyId],
@@ -411,6 +429,40 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     });
     get().saveGame();
     return true;
+  },
+
+  // ── Skill actions ───────────────────────────────────────────────────────────
+
+  allocateSkillPoint: (tree) => {
+    const { gameState } = get();
+    if (!gameState) return false;
+    const skills = gameState.skills ?? { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } };
+    if (skills.skillPoints <= 0 || skills.trees[tree] >= 10) return false;
+    set((state) => {
+      if (!state.gameState) return state;
+      const s = state.gameState.skills ?? { skillPoints: 0, trees: { drifter: 0, trader: 0, survivor: 0 } };
+      return {
+        gameState: {
+          ...state.gameState,
+          skills: {
+            skillPoints: s.skillPoints - 1,
+            trees: { ...s.trees, [tree]: s.trees[tree] + 1 },
+          },
+        },
+      };
+    });
+    get().saveGame();
+    return true;
+  },
+
+  getSkillLevel: (tree) => {
+    const { gameState } = get();
+    return gameState?.skills?.trees[tree] ?? 0;
+  },
+
+  hasSkill: (tree, minLevel) => {
+    const { gameState } = get();
+    return (gameState?.skills?.trees[tree] ?? 0) >= minLevel;
   },
 
   // ── Zone actions ────────────────────────────────────────────────────────────
