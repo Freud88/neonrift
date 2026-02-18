@@ -31,7 +31,7 @@ interface BattleStoreState {
   pendingEnemyCard: CardInPlay | null;   // card enemy just played — waiting for player ack
 
   // Actions
-  startBattle: (playerDeck: Card[], enemyProfileId: string, overrideProfile?: EnemyProfile) => void;
+  startBattle: (playerDeck: Card[], enemyProfileId: string, overrideProfile?: EnemyProfile, decayStage?: number) => void;
   doMulligan: () => void;
   acceptHand: () => void;
   selectCard: (instanceId: string | null) => void;
@@ -64,7 +64,7 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
   isAnimating: false,
   pendingEnemyCard: null,
 
-  startBattle: (playerDeck, enemyProfileId, overrideProfile) => {
+  startBattle: (playerDeck, enemyProfileId, overrideProfile, decayStage = 0) => {
     const profile = overrideProfile ?? ENEMIES[enemyProfileId];
     if (!profile) return;
 
@@ -80,7 +80,7 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       return { ...base, ...applyModStats(base, card.mods.mods), mods: card.mods, uniqueId: card.uniqueId, artIndex: card.artIndex };
     });
 
-    const engine = new BattleEngine(bakedDeck, enemyCards, enemyProfileId, profile.health);
+    const engine = new BattleEngine(bakedDeck, enemyCards, enemyProfileId, profile.health, decayStage);
     const ai     = new AIEngine(engine, profile.aiType as AIType);
 
     set({

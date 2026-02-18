@@ -55,6 +55,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
   const [shake, setShake]                   = useState(false);
   const [showLog, setShowLog]               = useState(false);
+  const [decayToasts, setDecayToasts]       = useState<{ id: string; msg: string }[]>([]);
   const prevPlayerHp = useRef<number | null>(null);
   const prevEnemyHp  = useRef<number | null>(null);
 
@@ -66,7 +67,8 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     if (!gameState) return;
     // Set rift level for tier rolling (higher zone = better enemy mod tiers)
     setRiftLevelForTierRoll(activeZone?.config.level ?? 0);
-    startBattle(gameState.deck, enemyProfileId, overrideProfile);
+    const decayStage = activeZone?.riftClock?.currentStage ?? 0;
+    startBattle(gameState.deck, enemyProfileId, overrideProfile, decayStage);
     return () => clearBattle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -92,6 +94,20 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     prevEnemyHp.current  = enemyHp;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleState?.player.health, battleState?.enemy.health]);
+
+  // ── Consume decay events → show toasts ─────────────────────────────────────
+  useEffect(() => {
+    if (!battleState?.decayEvents.length || !engine) return;
+    const events = engine.consumeDecayEvents();
+    if (!events.length) return;
+    const newToasts = events.map((msg) => ({ id: `decay-${Date.now()}-${Math.random()}`, msg }));
+    setDecayToasts((prev) => [...prev, ...newToasts]);
+    // Auto-dismiss after 3.5s
+    newToasts.forEach(({ id }) => {
+      setTimeout(() => setDecayToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battleState?.decayEvents.length]);
 
   // ── Watch for battle end ────────────────────────────────────────────────────
   useEffect(() => {
@@ -410,6 +426,49 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Decay event toasts — stacked above hand */}
+      <div style={{
+        position: 'absolute',
+        bottom: 160,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+        pointerEvents: 'none',
+      }}>
+        <AnimatePresence>
+          {decayToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(8,2,2,0.97)',
+                border: '1px solid rgba(180,30,30,0.7)',
+                padding: '5px 12px',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 10,
+                color: '#ff6655',
+                letterSpacing: '0.08em',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 0 10px rgba(200,0,0,0.25)',
+              }}
+            >
+              <span style={{ fontSize: 12 }}>☠</span>
+              {toast.msg}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* Hand area */}
       <div style={{

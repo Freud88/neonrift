@@ -4,6 +4,7 @@ import { generateModdedCard, modCountForDifficulty } from '@/utils/cardMods';
 import { ENEMIES } from '@/data/enemies';
 import { rollCraftingDrop } from '@/data/craftingItems';
 import { MOD_MAP } from '@/data/mods';
+import { pickDecayMod } from '@/data/decayMods';
 
 // ── Mod special helpers (10-tier system: reads specialValue directly) ─────────
 
@@ -111,14 +112,18 @@ export interface BattleState {
   log: string[];                // combat log for debug
   /** Forked mod: second launch awaiting player target selection */
   pendingFork: { dmg: number; sourceCard: CardInPlay } | null;
+  /** Decay mod events: shown as toasts in battle UI, cleared after each consume */
+  decayEvents: string[];
 }
 
 // ── BattleEngine ──────────────────────────────────────────────────────────────
 
 export class BattleEngine {
   private state: BattleState;
+  private decayStage: number;
 
-  constructor(playerDeck: Card[], enemyDeck: Card[], enemyProfileId: string, enemyHealth = 20) {
+  constructor(playerDeck: Card[], enemyDeck: Card[], enemyProfileId: string, enemyHealth = 20, decayStage = 0) {
+    this.decayStage = decayStage;
     const playerShuffled = shuffle(playerDeck);
     const enemyShuffled  = shuffle(enemyDeck);
 
@@ -148,6 +153,7 @@ export class BattleEngine {
       result: 'pending',
       log: [],
       pendingFork: null,
+      decayEvents: [],
     };
 
     // Draw opening hands (4 cards each)
@@ -757,6 +763,7 @@ export class BattleEngine {
         const defenderDmg = target.currentAttack;
         const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
         const defenderArmor = target.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
+        const targetWillDie = (target.currentDefense - Math.max(0, attackerDmg - defenderArmor)) <= 0;
         this._dealDamageToAgent(target,   player, Math.max(0, attackerDmg - defenderArmor), attacker, enemy);
         this._dealDamageToAgent(attacker, enemy,  Math.max(0, defenderDmg - attackerArmor));
         const corrode = getCorrodeValues(attacker);
@@ -766,6 +773,10 @@ export class BattleEngine {
             stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.v1);
             stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
           }
+        }
+        // Decay mod effects (only if target has mods worth degrading, or memory_wipe/bit_flip)
+        if (this.decayStage >= 2) {
+          this._applyDecayEffect(attacker, target, targetWillDie);
         }
         events.push({ type: 'combat', attacker, blocker: target, attackerDmg, blockerDmg: defenderDmg, target: 'agent' });
       } else {
@@ -781,6 +792,10 @@ export class BattleEngine {
         if (drainPct > 0 && effectiveDmg > 0) {
           const healed = Math.ceil(effectiveDmg * drainPct / 100);
           enemy.health = Math.min(enemy.maxHealth, enemy.health + healed);
+        }
+        // Decay: direct hit can trigger memory_wipe / heap_corruption
+        if (this.decayStage >= 2) {
+          this._applyDecayEffect(attacker, null, false);
         }
       }
     }
@@ -861,6 +876,166 @@ export class BattleEngine {
     if (isPlayer && drawn > 0) {
       this._log(`Drew ${drawn} card${drawn > 1 ? 's' : ''}.`);
     }
+  }
+
+  private _decayEvent(msg: string) {
+    this.state.decayEvents.push(msg);
+    this._log(`☠ ${msg}`);
+  }
+
+  /**
+   * Apply a decay mod effect from an enemy attacker to the player's target card.
+   * Called when an enemy agent with a decay mod hits (or kills) a player card.
+   */
+  private _applyDecayEffect(
+    enemyAttacker: CardInPlay,
+    playerTarget: CardInPlay | null,   // null if attacking player directly
+    onKill: boolean,
+  ) {
+    if (this.decayStage < 2) return;
+
+    const cardType = enemyAttacker.card.type as 'agent' | 'script' | 'trap';
+    const decay = pickDecayMod(cardType, this.decayStage);
+    if (!decay) return;
+
+    const player = this.state.player;
+    const effect = decay.effect;
+
+    switch (effect.type) {
+      case 'tier_corrode': {
+        // Corrode N tiers from a random mod on the hit target
+        if (!playerTarget) break;
+        // Only on-kill for D04/D07; otherwise on-hit
+        if (decay.id === 'D04' || decay.id === 'D07') {
+          if (!onKill) break;
+        } else {
+          if (onKill) break;
+        }
+        const mods = playerTarget.card.mods?.mods ?? [];
+        if (mods.length === 0) break;
+        const unlocked = mods.filter((m) => !playerTarget.card.mods?.locked.includes(m.modId));
+        const target = unlocked.length > 0 ? unlocked[Math.floor(Math.random() * unlocked.length)] : mods[Math.floor(Math.random() * mods.length)];
+        if (!target) break;
+        const modDef = MOD_MAP[target.modId];
+        const oldTier = target.tier;
+        const newTier = Math.max(1, oldTier - effect.value);
+        // Apply to the live card's mod array (mutate in place)
+        const liveCard = player.field.find((c) => c.instanceId === playerTarget.instanceId);
+        if (liveCard?.card.mods) {
+          const liveMod = liveCard.card.mods.mods.find((m) => m.modId === target.modId);
+          if (liveMod) liveMod.tier = newTier;
+        }
+        this._decayEvent(`${decay.name}: ${playerTarget.card.mods?.displayName ?? playerTarget.card.name}'s ${modDef?.name ?? target.modId} corroded T${oldTier}→T${newTier}`);
+        break;
+      }
+
+      case 'mod_strip': {
+        // Strip a random unlocked mod from the killed player card
+        if (!onKill || !playerTarget) break;
+        const mods = playerTarget.card.mods?.mods ?? [];
+        const unlocked = mods.filter((m) => !playerTarget.card.mods?.locked.includes(m.modId));
+        if (unlocked.length === 0) break;
+        const stripMod = unlocked[Math.floor(Math.random() * unlocked.length)];
+        const modDef = MOD_MAP[stripMod.modId];
+        // Remove from the card in-place (card in discard — visual only)
+        const modsArr = playerTarget.card.mods!.mods;
+        const idx = modsArr.indexOf(stripMod);
+        if (idx !== -1) modsArr.splice(idx, 1);
+        this._decayEvent(`${decay.name}: stripped ${modDef?.name ?? stripMod.modId} from ${playerTarget.card.mods?.displayName ?? playerTarget.card.name}`);
+        break;
+      }
+
+      case 'worm': {
+        // On kill: infect 1 random card in player deck, corrode 1 tier
+        if (!onKill) break;
+        const deckCard = player.deck[Math.floor(Math.random() * player.deck.length)];
+        if (!deckCard?.mods?.mods.length) break;
+        const deckMod = deckCard.mods.mods[Math.floor(Math.random() * deckCard.mods.mods.length)];
+        const modDef = MOD_MAP[deckMod.modId];
+        const oldTier = deckMod.tier;
+        deckMod.tier = Math.max(1, oldTier - 1);
+        this._decayEvent(`${decay.name}: worm infected ${deckCard.mods.displayName ?? deckCard.name}'s ${modDef?.name ?? deckMod.modId} (T${oldTier}→T${deckMod.tier}) in deck`);
+        break;
+      }
+
+      case 'memory_wipe': {
+        // Discard N random cards from player hand (on-hit for scripts)
+        if (onKill) break;
+        const count = Math.min(effect.value, player.hand.length);
+        if (count === 0) break;
+        const victims: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * player.hand.length);
+          const [removed] = player.hand.splice(idx, 1);
+          player.discard.push(removed.card);
+          victims.push(removed.card.name);
+        }
+        this._decayEvent(`${decay.name}: discarded ${victims.join(', ')}`);
+        break;
+      }
+
+      case 'bit_flip': {
+        // Swap ATK/DEF on a player agent — triggered by traps, apply on hit
+        if (onKill || !playerTarget) break;
+        const liveCard = player.field.find((c) => c.instanceId === playerTarget.instanceId);
+        if (!liveCard) break;
+        const tmp = liveCard.currentAttack;
+        liveCard.currentAttack  = liveCard.currentDefense;
+        liveCard.currentDefense = tmp;
+        this._decayEvent(`${decay.name}: ${liveCard.card.name}'s ATK/DEF swapped (${liveCard.currentDefense}/${liveCard.currentAttack}→${liveCard.currentAttack}/${liveCard.currentDefense})`);
+        break;
+      }
+
+      case 'stack_overflow': {
+        // Increase cost of all player hand cards by 1
+        if (onKill) break;
+        for (const handCard of player.hand) {
+          // Mutate the card cost in-place
+          (handCard.card as Card & { _costOverflow?: number })._costOverflow = ((handCard.card as Card & { _costOverflow?: number })._costOverflow ?? 0) + effect.value;
+        }
+        this._decayEvent(`${decay.name}: all hand cards cost +${effect.value} this battle`);
+        break;
+      }
+
+      case 'heap_corruption': {
+        // Reduce player max HP
+        if (onKill) break;
+        player.maxHealth = Math.max(1, player.maxHealth - effect.value);
+        player.health    = Math.min(player.health, player.maxHealth);
+        this._decayEvent(`${decay.name}: max HP reduced by ${effect.value} (now ${player.maxHealth})`);
+        break;
+      }
+
+      case 'damage_degrade': {
+        // Corrode N tiers from target on hit
+        if (onKill || !playerTarget) break;
+        const mods = playerTarget.card.mods?.mods ?? [];
+        if (mods.length === 0) break;
+        const unlocked = mods.filter((m) => !playerTarget.card.mods?.locked.includes(m.modId));
+        const t = unlocked.length > 0 ? unlocked[Math.floor(Math.random() * unlocked.length)] : mods[Math.floor(Math.random() * mods.length)];
+        if (!t) break;
+        const modDef = MOD_MAP[t.modId];
+        const oldTier = t.tier;
+        const newTier = Math.max(1, oldTier - effect.value);
+        const liveCard = player.field.find((c) => c.instanceId === playerTarget.instanceId);
+        if (liveCard?.card.mods) {
+          const liveMod = liveCard.card.mods.mods.find((m) => m.modId === t.modId);
+          if (liveMod) liveMod.tier = newTier;
+        }
+        this._decayEvent(`${decay.name}: ${playerTarget.card.mods?.displayName ?? playerTarget.card.name}'s ${modDef?.name ?? t.modId} degraded T${oldTier}→T${newTier}`);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  /** Consume and return pending decay events (clears the buffer). */
+  consumeDecayEvents(): string[] {
+    const events = [...this.state.decayEvents];
+    this.state.decayEvents = [];
+    return events;
   }
 
   private _checkWinCondition() {
