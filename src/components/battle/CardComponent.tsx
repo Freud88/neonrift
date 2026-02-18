@@ -394,7 +394,7 @@ export default function CardComponent({
   const cardMods        = card.mods;
   const modRarity       = cardMods?.modRarity;
   const rarityBorderColor = modRarity && modRarity !== 'common' ? MOD_RARITY_COLOR[modRarity] : null;
-  const accentColor     = rarityBorderColor ?? ec.primary;
+  const accentColor     = card.isEchoed ? '#ffd700' : (rarityBorderColor ?? ec.primary);
   // Highest tier among all mods — for T7+ card glow
   const maxTier = cardMods?.mods.reduce((max, m) => Math.max(max, m.tier), 0) ?? 0;
 
@@ -451,11 +451,15 @@ export default function CardComponent({
             ? `2px solid #fff`
             : attacking
             ? `2px solid #ff4444`
+            : card.isEchoed
+            ? `1.5px solid #ffd700`
             : `1px solid ${accentColor}88`,
           boxShadow: selected
             ? `0 0 16px #fff8, 0 0 8px ${accentColor}`
             : attacking
             ? `0 0 14px #ff4444`
+            : card.isEchoed
+            ? `0 0 12px #ffd70088, 0 0 24px #00f0ff44`
             : maxTier >= 7
             ? `0 0 ${8 + (maxTier - 7) * 4}px ${TIER_COLORS[maxTier]}88, 0 0 ${14 + (maxTier - 7) * 6}px ${TIER_COLORS[maxTier]}44`
             : rarityBorderColor
@@ -485,12 +489,42 @@ export default function CardComponent({
             card={card}
             inPlay={inPlay}
             ec={ec}
-            rarityBorderColor={rarityBorderColor}
+            rarityBorderColor={card.isEchoed ? null : rarityBorderColor}
             w={w}
             h={h}
             fontSize={fontSize}
             fullDetail={false}
           />
+        )}
+
+        {/* Echoed badge + shimmer overlay */}
+        {!faceDown && card.isEchoed && (
+          <>
+            <motion.div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(120deg, transparent 0%, rgba(255,215,0,0.08) 40%, transparent 60%)',
+              pointerEvents: 'none', zIndex: 10,
+            }}
+              animate={{ backgroundPosition: ['-200% 0', '200% 0'] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'linear', repeatDelay: 0.8 }}
+            />
+            <div style={{
+              position: 'absolute', top: 2, right: 2,
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: Math.max(fontSize - 2, 4.5),
+              fontWeight: 700,
+              color: '#ffd700',
+              background: 'rgba(0,0,0,0.75)',
+              padding: '1px 3px',
+              borderRadius: 2,
+              letterSpacing: '0.05em',
+              textShadow: '0 0 6px #ffd700',
+              pointerEvents: 'none',
+              zIndex: 11,
+            }}>
+              ◇ECHO
+            </div>
+          </>
         )}
 
         {/* Energy shimmer effects */}

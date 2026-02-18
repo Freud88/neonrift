@@ -50,6 +50,40 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
   const applyCraft = useCallback(() => {
     if (!activeItem || !selectedCard || !gameState) return;
 
+    // Echoed cards are immutable — block all crafting except Echo Prism itself is also blocked
+    if (selectedCard.isEchoed) {
+      showFlash('This card is Echoed — it cannot be modified.');
+      return;
+    }
+
+    // Echo Prism cannot be applied to an already-echoed card (guard above handles it)
+    // and produces a copy without consuming if validation fails
+    if (activeItem === 'echo_prism') {
+      const consumed = removeCraftingItem('echo_prism');
+      if (!consumed) { showFlash('No Echo Prism left!'); return; }
+      const modKey = (selectedCard.mods?.mods ?? []).map((m) => `${m.modId}_T${m.tier}`).sort().join('_');
+      const echoId = `${selectedCard.id}__echo__${modKey}__${Date.now()}`;
+      const echoedCard: Card = {
+        ...selectedCard,
+        uniqueId: echoId,
+        isEchoed: true,
+        mods: selectedCard.mods
+          ? {
+              ...selectedCard.mods,
+              displayName: (selectedCard.mods.displayName ?? selectedCard.name) + ' (Echoed)',
+              locked: selectedCard.mods.mods.map((m) => m.modId), // lock all mods
+            }
+          : undefined,
+      };
+      useGameStore.setState((s) => {
+        if (!s.gameState) return s;
+        return { gameState: { ...s.gameState, collection: [...s.gameState.collection, echoedCard] } };
+      });
+      useGameStore.getState().saveGame();
+      showFlash(`Echo created: ${echoedCard.mods?.displayName ?? echoedCard.name}`);
+      return;
+    }
+
     const consumed = removeCraftingItem(activeItem);
     if (!consumed) { showFlash('No items left!'); return; }
 
@@ -436,7 +470,15 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
           </AnimatePresence>
 
           {/* Instruction */}
-          {activeItem ? (
+          {selectedCard.isEchoed ? (
+            <p style={{
+              fontSize: 9, color: '#ffd700',
+              letterSpacing: '0.15em', marginBottom: 16, textAlign: 'center',
+              textShadow: '0 0 8px #ffd700',
+            }}>
+              ◇ ECHOED — THIS CARD IS IMMUTABLE AND CANNOT BE MODIFIED
+            </p>
+          ) : activeItem ? (
             <p style={{
               fontSize: 9, color: activeItemDef?.color ?? '#6666aa',
               letterSpacing: '0.15em', marginBottom: 16, textAlign: 'center',

@@ -54,6 +54,8 @@ export interface Card {
   mods?: CardMods;
   /** Random index into the agent art pool, assigned at generation time */
   artIndex?: number;
+  /** True if this card was duplicated by an Echo Prism — immutable, immune to crafting/decay */
+  isEchoed?: boolean;
 }
 
 export interface CardInPlay {

@@ -12,7 +12,8 @@ export type CraftingItemId =
   | 'recompiler'
   | 'tier_boost'
   | 'architects_key'
-  | 'quantum_lock';
+  | 'quantum_lock'
+  | 'echo_prism';
 
 export interface CraftingItem {
   id: CraftingItemId;

@@ -60,6 +60,15 @@ export const CRAFTING_ITEMS: Record<CraftingItemId, CraftingItemDef> = {
     icon: '🔒',
     dropWeight: 5,
   },
+  echo_prism: {
+    id: 'echo_prism',
+    name: 'Echo Prism',
+    description: 'Create a perfect, immutable copy of a card — mods, tier and all. The copy cannot be modified or affected by Decay.',
+    color: '#ffd700',
+    icon: '◇',
+    dropWeight: 0,
+    isBossOnly: true,
+  },
 };
 
 export const CRAFTING_ITEMS_LIST = Object.values(CRAFTING_ITEMS);
