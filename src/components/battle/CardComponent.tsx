@@ -71,10 +71,12 @@ function CardFrame({
   const modSlots   = cardMods?.mods.length ?? 0;
   const accentColor = rarityBorderColor ?? ec.primary;
 
-  // Zone heights (px)
+  // Zone heights — dynamically shift art→body when many mods
   const headerH = Math.round(h * 0.13);
-  const artH    = Math.round(h * 0.37);
-  const bodyH   = Math.round(h * 0.40);
+  const artPct  = modSlots >= 5 ? 0.22 : modSlots >= 4 ? 0.28 : 0.37;
+  const bodyPct = modSlots >= 5 ? 0.55 : modSlots >= 4 ? 0.49 : 0.40;
+  const artH    = Math.round(h * artPct);
+  const bodyH   = Math.round(h * bodyPct);
   const footerH = h - headerH - artH - bodyH;
 
   return (
@@ -177,12 +179,13 @@ function CardFrame({
             {/* Rarity label */}
             <div style={{
               fontFamily: 'JetBrains Mono, monospace',
-              fontSize: Math.max(fontSize - 2, 5),
+              fontSize: Math.max(fontSize - 2, 4.5),
               color: accentColor,
               letterSpacing: '0.07em',
               fontWeight: 700,
-              marginBottom: 1,
+              marginBottom: 0,
               flexShrink: 0,
+              lineHeight: 1.2,
             }}>
               {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
             </div>
@@ -197,31 +200,33 @@ function CardFrame({
               const isBad    = !!(effect.isNegative || effect.isUseless);
               const nameColor = isBad ? '#666677' : isPrefix ? '#00e5ff' : '#dd44ff';
               const badgeColor = isBad ? '#444455' : TIER_COLOR[tier];
+              // Shrink text when many mods
+              const modFontAdj = modSlots >= 5 ? -0.5 : 0;
 
               return (
                 <div key={i} style={{ flexShrink: 0, marginBottom: fullDetail ? 3 : 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     {/* tier badge */}
                     <span style={{
                       fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: Math.max(fontSize - 2, 5),
+                      fontSize: Math.max(fontSize - 2 + modFontAdj, 4.5),
                       color: badgeColor,
                       fontWeight: 700,
                       flexShrink: 0,
-                      lineHeight: 1.3,
+                      lineHeight: 1.2,
                     }}>
                       {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
                     </span>
                     {/* mod name */}
                     <span style={{
                       fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: Math.max(fontSize - 1.5, 5),
+                      fontSize: Math.max(fontSize - 1.5 + modFontAdj, 4.5),
                       color: nameColor,
                       fontWeight: 600,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      lineHeight: 1.3,
+                      lineHeight: 1.2,
                     }}>
                       {mod.name}
                     </span>
