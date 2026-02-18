@@ -54,6 +54,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const pendingFork = battleState?.pendingFork ?? null;
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
   const [shake, setShake]                   = useState(false);
+  const [showLog, setShowLog]               = useState(false);
   const prevPlayerHp = useRef<number | null>(null);
   const prevEnemyHp  = useRef<number | null>(null);
 
@@ -468,6 +469,111 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
           onContinue={handleContinue}
         />
       )}
+
+      {/* Combat log toggle button */}
+      <button
+        onClick={() => setShowLog((v) => !v)}
+        style={{
+          position: 'absolute',
+          bottom: 58,
+          right: 6,
+          zIndex: 30,
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 9,
+          letterSpacing: '0.12em',
+          background: showLog ? 'rgba(0,240,255,0.15)' : 'rgba(10,10,30,0.85)',
+          border: `1px solid ${showLog ? '#00f0ff' : '#223344'}`,
+          color: showLog ? '#00f0ff' : '#445566',
+          padding: '4px 8px',
+          cursor: 'pointer',
+          borderRadius: 2,
+        }}
+      >
+        {showLog ? '✕ LOG' : '📋 LOG'}
+      </button>
+
+      {/* Combat log panel */}
+      <AnimatePresence>
+        {showLog && (
+          <motion.div
+            key="combat-log"
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'absolute',
+              top: 52,
+              right: 0,
+              bottom: 80,
+              width: 230,
+              zIndex: 25,
+              background: 'rgba(4,4,18,0.96)',
+              borderLeft: '1px solid rgba(0,240,255,0.18)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Log header */}
+            <div style={{
+              padding: '6px 10px',
+              borderBottom: '1px solid rgba(0,240,255,0.12)',
+              fontFamily: 'Orbitron, sans-serif',
+              fontSize: 8,
+              color: '#00f0ff',
+              letterSpacing: '0.2em',
+              flexShrink: 0,
+            }}>
+              COMBAT LOG
+            </div>
+
+            {/* Log entries — newest first */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '6px 8px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+            }}>
+              {battleState.log.length === 0 ? (
+                <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#334455', fontStyle: 'italic' }}>
+                  No events yet.
+                </p>
+              ) : (
+                [...battleState.log].reverse().map((entry, i) => {
+                  const lower = entry.toLowerCase();
+                  const color =
+                    lower.includes('wins') || lower.includes('healed') ? '#44ff88'
+                    : lower.includes('loses') || lower.includes('damage') || lower.includes('attacks') || lower.includes('takes') ? '#ff5566'
+                    : lower.includes('trap') || lower.includes('detonat') ? '#ff8800'
+                    : lower.includes('fatigue') ? '#ff8800'
+                    : lower.includes('plays') || lower.includes('sets') || lower.includes('returns') ? '#00f0ff'
+                    : lower.includes('forked') || lower.includes('drain') ? '#c850ff'
+                    : '#6688aa';
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: 9,
+                        color,
+                        lineHeight: 1.4,
+                        paddingBottom: 2,
+                        borderBottom: i < battleState.log.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {entry}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

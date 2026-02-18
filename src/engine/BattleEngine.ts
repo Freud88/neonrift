@@ -443,7 +443,9 @@ export class BattleEngine {
         owner.health = Math.min(owner.maxHealth, owner.health + siphon);
       }
     } else if (effect.type === 'heal') {
+      const healed = Math.min(owner.maxHealth - owner.health, effect.value ?? 0);
       owner.health = Math.min(owner.maxHealth, owner.health + (effect.value ?? 0));
+      if (healed > 0) this._log(`${inPlay.card.name} heals ${healed} HP.`);
     } else if (effect.type === 'draw') {
       this._drawCards(owner, effect.value ?? 1);
       // supply crate: +1 temp data cell
@@ -843,6 +845,8 @@ export class BattleEngine {
   }
 
   private _drawCards(combatant: CombatantState, count: number) {
+    const isPlayer = combatant === this.state.player;
+    let drawn = 0;
     for (let i = 0; i < count; i++) {
       if (combatant.deck.length === 0) {
         combatant.fatigue++;
@@ -851,7 +855,11 @@ export class BattleEngine {
       } else {
         const card = combatant.deck.shift()!;
         combatant.hand.push(makeInstance(card));
+        drawn++;
       }
+    }
+    if (isPlayer && drawn > 0) {
+      this._log(`Drew ${drawn} card${drawn > 1 ? 's' : ''}.`);
     }
   }
 
