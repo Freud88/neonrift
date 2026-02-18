@@ -18,6 +18,7 @@ interface ZoneHUDProps {
   riftStageProgress: number;
   onExit: () => void;
   onForgeKey: () => void;
+  onOpenDeck?: () => void;
 }
 
 export default function ZoneHUD({
@@ -32,6 +33,7 @@ export default function ZoneHUD({
   riftStageProgress,
   onExit,
   onForgeKey,
+  onOpenDeck,
 }: ZoneHUDProps) {
   const miniRef = useRef<HTMLCanvasElement>(null);
   const { config, shardsCollected, gridKeyForged, bossDefeated } = zoneState;
@@ -150,8 +152,13 @@ export default function ZoneHUD({
         }}
       />
 
-      {/* Exit button (bottom-right) */}
-      <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 10 }}>
+      {/* Bottom-right buttons */}
+      <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 10, display: 'flex', gap: 8 }}>
+        {onOpenDeck && (
+          <NeonButton variant="ghost" size="sm" onClick={onOpenDeck}>
+            📋 DECK
+          </NeonButton>
+        )}
         <NeonButton variant="ghost" size="sm" onClick={onExit}>
           EXIT ZONE
         </NeonButton>

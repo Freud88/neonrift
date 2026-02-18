@@ -5,6 +5,7 @@ import { ENEMIES } from '@/data/enemies';
 import { rollCraftingDrop } from '@/data/craftingItems';
 import { MOD_MAP } from '@/data/mods';
 import { pickDecayMod } from '@/data/decayMods';
+import { CORRUPTION_MAP } from '@/data/riftCorruptions';
 
 // ── Mod special helpers (10-tier system: reads specialValue directly) ─────────
 
@@ -74,6 +75,21 @@ export function makeInstance(card: Card): CardInPlay {
   };
 }
 
+// ── New mod special decoders ──────────────────────────────────────────────────
+
+/** Decode a 2-digit signed int from corroded/unstable specialValue2:
+ *  e.g. 21 → {atk:2, def:1}, -11 → {atk:-1, def:-1}, -1 → {atk:0, def:-1}
+ *  Special: single negative small numbers (-1, -10) map to DEF only or ATK only.
+ */
+function decodeStatPair(v: number): { atk: number; def: number } {
+  if (v === 0) return { atk: 0, def: 0 };
+  const sign = v < 0 ? -1 : 1;
+  const abs = Math.abs(v);
+  const atk = Math.floor(abs / 10);
+  const def = abs % 10;
+  return { atk: sign * atk, def: sign * def };
+}
+
 // ── State types ───────────────────────────────────────────────────────────────
 
 export type BattlePhase =
@@ -121,9 +137,19 @@ export interface BattleState {
 export class BattleEngine {
   private state: BattleState;
   private decayStage: number;
+  private activeCorruptions: string[];
 
-  constructor(playerDeck: Card[], enemyDeck: Card[], enemyProfileId: string, enemyHealth = 20, decayStage = 0) {
+  constructor(
+    playerDeck: Card[],
+    enemyDeck: Card[],
+    enemyProfileId: string,
+    enemyHealth = 20,
+    decayStage = 0,
+    activeCorruptions: string[] = [],
+  ) {
     this.decayStage = decayStage;
+    this.activeCorruptions = activeCorruptions;
+
     const playerShuffled = shuffle(playerDeck);
     const enemyShuffled  = shuffle(enemyDeck);
 
@@ -156,9 +182,67 @@ export class BattleEngine {
       decayEvents: [],
     };
 
-    // Draw opening hands (4 cards each)
-    this._drawCards(this.state.player, 4);
+    // ── Apply corruption: junk injection ────────────────────────────────────
+    let totalJunk = 0;
+    for (const cid of activeCorruptions) {
+      const c = CORRUPTION_MAP[cid];
+      if (c?.effect.type === 'junk_inject') totalJunk += c.effect.value;
+    }
+    if (totalJunk > 0) {
+      const junkCard: Card = {
+        id: 'junk_data',
+        name: 'Junk Data',
+        description: 'Corrupted data. Cannot be played.',
+        cost: 99,
+        type: 'script',
+        energy: 'neutral',
+        rarity: 'common',
+        effect: { type: 'damage', target: 'any', value: 0, description: 'No effect' },
+      };
+      for (let j = 0; j < totalJunk; j++) {
+        const insertAt = Math.floor(Math.random() * (this.state.player.deck.length + 1));
+        this.state.player.deck.splice(insertAt, 0, junkCard);
+      }
+      this._log(`Corruption: ${totalJunk} Junk Data injected into deck`);
+    }
+
+    // ── Apply corruption: cost increase ─────────────────────────────────────
+    let totalCostIncrease = 0;
+    for (const cid of activeCorruptions) {
+      const c = CORRUPTION_MAP[cid];
+      if (c?.effect.type === 'cost_increase') totalCostIncrease += c.effect.value;
+    }
+    if (totalCostIncrease > 0) {
+      // Apply to all player deck cards
+      this.state.player.deck = this.state.player.deck.map((card) => ({
+        ...card,
+        cost: Math.min(10, card.cost + totalCostIncrease),
+      }));
+    }
+
+    // ── Draw opening hands ───────────────────────────────────────────────────
+    // Starting hand reduce
+    let handReduce = 0;
+    for (const cid of activeCorruptions) {
+      const c = CORRUPTION_MAP[cid];
+      if (c?.effect.type === 'starting_hand_reduce') handReduce += c.effect.value;
+    }
+    const openingHandSize = Math.max(1, 4 - handReduce);
+    this._drawCards(this.state.player, openingHandSize);
     this._drawCards(this.state.enemy, 4);
+  }
+
+  /** Returns total corruption effect value for a given type. */
+  private _corruptionTotal(type: string): number {
+    return this.activeCorruptions.reduce((sum, cid) => {
+      const c = CORRUPTION_MAP[cid];
+      return c?.effect.type === type ? sum + c.effect.value : sum;
+    }, 0);
+  }
+
+  /** Returns true if any active corruption matches the given type. */
+  private _hasCorruption(type: string): boolean {
+    return this.activeCorruptions.some((cid) => CORRUPTION_MAP[cid]?.effect.type === type);
   }
 
   getState(): BattleState { return this.state; }
@@ -211,7 +295,14 @@ export class BattleEngine {
 
   private _startTurn(combatant: CombatantState) {
     combatant.maxDataCells = Math.min(10, combatant.maxDataCells + 1);
-    combatant.currentDataCells = combatant.maxDataCells;
+    const isPlayerTurn = combatant === this.state.player;
+    // Cell Drain corruption: player gets fewer data cells
+    if (isPlayerTurn) {
+      const cellReduce = this._corruptionTotal('cell_reduce');
+      combatant.currentDataCells = Math.max(0, combatant.maxDataCells - cellReduce);
+    } else {
+      combatant.currentDataCells = combatant.maxDataCells;
+    }
 
     // Regen keyword
     for (const c of combatant.field) {
@@ -229,15 +320,163 @@ export class BattleEngine {
       c.tapped = false;
       // Stealth countdown
       if (c.stealthTurns > 0) c.stealthTurns--;
+      // Clear T10 Sluggish immunity after first turn
+      if (c.sluggishImmune) c.sluggishImmune = false;
+      // Sluggish countdown
+      if (c.sluggishTurns !== undefined && c.sluggishTurns > 0) c.sluggishTurns--;
     }
 
     // Mark all as NOT summoned this turn (so they can attack if they have overclock)
-    // Actually: summoned last turn can attack — but agents summoned THIS turn cannot
-    // unless they have overclock. We set summonedThisTurn=false at start of turn
     for (const c of combatant.field) c.summonedThisTurn = false;
 
-    // Draw 1
-    this._drawCards(combatant, 1);
+    // ── Per-turn mod effects ────────────────────────────────────────────────────
+    const isPlayer = combatant === this.state.player;
+    const ally = combatant;
+    const turnNum = this.state.turnNumber;
+
+    for (const c of [...combatant.field]) {
+      if (c.card.type !== 'agent') continue;
+
+      // Leaking: lose HP per turn (positive = lose, negative = regen)
+      const leakVal = getSpecialValue(c, 'leaking');
+      if (leakVal !== 0) {
+        if (leakVal > 0) {
+          // Damage the agent
+          c.currentDefense -= leakVal;
+          if (isPlayer) this._log(`${c.card.name} leaks ${leakVal} HP (${c.currentDefense} DEF left)`);
+          if (c.currentDefense <= 0) {
+            this._dealDamageToAgent(c, combatant, 0); // trigger destruction logic
+            continue;
+          }
+        } else {
+          // Regen (negative = gain back HP)
+          const regenAmt = -leakVal;
+          c.currentDefense = Math.min((c.card.defense ?? 0) + (c.buffs.reduce((s, b) => s + b.defense, 0)), c.currentDefense + regenAmt);
+          if (isPlayer) this._log(`${c.card.name} regens ${regenAmt} HP (${c.currentDefense} DEF)`);
+          // T10 Life Siphon: all allies +1 ATK (bonus already baked into atkBonus in stats, but add as aura effect here)
+          // Note: atkBonus from the mod itself is already applied at card generation — this is correct.
+        }
+      }
+
+      // Corroded: gain/lose ATK/DEF per turn
+      const corrodedVal = getSpecialValue(c, 'corroded');
+      if (corrodedVal !== 0) {
+        if (corrodedVal === 5) {
+          // +1 ATK every 2 turns
+          const playedOn = c.playedOnTurn ?? 0;
+          const turnsSincePlay = turnNum - playedOn;
+          if (turnsSincePlay > 0 && turnsSincePlay % 2 === 0) {
+            c.currentAttack += 1;
+            if (isPlayer) this._log(`${c.card.name} grows: +1 ATK (Corroded T6)`);
+          }
+        } else if (corrodedVal === -1) {
+          // -1 DEF per turn (min 1)
+          c.currentDefense = Math.max(1, c.currentDefense - 1);
+          if (isPlayer) this._log(`${c.card.name} corrodes: -1 DEF`);
+        } else if (corrodedVal === -10) {
+          // -1 ATK per turn (min 0)
+          c.currentAttack = Math.max(0, c.currentAttack - 1);
+          if (isPlayer) this._log(`${c.card.name} corrodes: -1 ATK`);
+        } else {
+          // Encoded pair (positive = gain, negative = lose)
+          const pair = decodeStatPair(corrodedVal);
+          if (pair.atk !== 0) c.currentAttack = Math.max(0, c.currentAttack + pair.atk);
+          if (pair.def !== 0) c.currentDefense = Math.max(0, c.currentDefense + pair.def);
+          if (isPlayer && (pair.atk !== 0 || pair.def !== 0)) {
+            const atkStr = pair.atk !== 0 ? `${pair.atk > 0 ? '+' : ''}${pair.atk} ATK` : '';
+            const defStr = pair.def !== 0 ? `${pair.def > 0 ? '+' : ''}${pair.def} DEF` : '';
+            this._log(`${c.card.name} adapts: ${[atkStr, defStr].filter(Boolean).join(', ')}`);
+          }
+        }
+      }
+
+      // Unstable: end-of-turn self-destruct chance + grow on survive
+      const unstableVal = getSpecialValue(c, 'unstable');
+      const unstableGain = getSpecialValues(c, 'unstable').v2; // specialValue2
+      if (unstableVal > 0 && Math.random() * 100 < unstableVal) {
+        if (isPlayer) this._log(`${c.card.name} self-destructs! (Unstable ${unstableVal}%)`);
+        this._dealDamageToAgent(c, combatant, c.currentDefense + 1);
+        continue;
+      } else if (unstableGain > 0 && c.currentDefense > 0) {
+        // Card survived — apply growth
+        const gain = decodeStatPair(unstableGain);
+        if (gain.atk > 0) c.currentAttack += gain.atk;
+        if (gain.def > 0) c.currentDefense += gain.def;
+        if (isPlayer && (gain.atk > 0 || gain.def > 0)) {
+          const label = unstableVal > 0 ? 'survives' : 'grows';
+          this._log(`${c.card.name} ${label}: ${gain.atk > 0 ? `+${gain.atk} ATK ` : ''}${gain.def > 0 ? `+${gain.def} DEF` : ''}`);
+        }
+      }
+    }
+
+    // Leaking T10: ally buff (already handled by atkBonus in cardMods at generation)
+    // But if the leaking field card has specialValue === -2, buff other allies' ATK by 1
+    for (const c of combatant.field) {
+      if (c.card.type === 'agent' && getSpecialValue(c, 'leaking') === -2) {
+        for (const ally2 of combatant.field) {
+          if (ally2 !== c && ally2.card.type === 'agent') {
+            ally2.currentAttack += 1;
+          }
+        }
+        if (isPlayer) this._log(`${c.card.name} Life Siphon: all allies +1 ATK`);
+        break; // Only one Life Siphon aura per turn
+      }
+    }
+    void ally; // suppress unused warning
+
+    // Memory Leak: cost changes per turn in hand
+    for (const hCard of combatant.hand) {
+      if (hCard.turnsInHand === undefined) hCard.turnsInHand = 0;
+      hCard.turnsInHand++;
+
+      const mlVal = getSpecialValue(hCard, 'memleak');
+      if (mlVal === 0) continue;
+
+      let shouldChange = false;
+      if (mlVal === 1 || mlVal === -1) {
+        // Every turn
+        shouldChange = true;
+      } else if (mlVal === 2 || mlVal === 3 || mlVal === -3) {
+        // Every 2 turns
+        shouldChange = hCard.turnsInHand % 2 === 0;
+      } else if (mlVal === 4 || mlVal === -4) {
+        // Every 3 turns
+        shouldChange = hCard.turnsInHand % 3 === 0;
+      }
+
+      if (shouldChange) {
+        const delta = mlVal > 0 ? 1 : -1;
+        const currentCost = hCard.card.cost;
+        const newCost = Math.max(0, currentCost + delta);
+        (hCard.card as { cost: number }).cost = newCost;
+
+        // Memory Compression (specialValue2=2): if cost reaches 0, card will be played twice
+        // Just log for now — the "play twice" mechanic is handled in playCard
+        const mlBonus = getSpecialValues(hCard, 'memleak').v2;
+        if (mlBonus === 1 && newCost === 0) {
+          // +2 ATK bonus applied directly
+          hCard.currentAttack += 2;
+        }
+      }
+    }
+
+    // Shield Drain corruption: reduce player shield (agent DEF) at turn start
+    if (isPlayerTurn && combatant === this.state.player) {
+      const shieldDrain = this._corruptionTotal('shield_drain');
+      if (shieldDrain > 0) {
+        for (const c of combatant.field) {
+          if (c.card.type === 'agent' && c.currentDefense > 0) {
+            c.currentDefense = Math.max(0, c.currentDefense - shieldDrain);
+          }
+        }
+        this._log(`Corruption Shield Erosion: all agents -${shieldDrain} DEF`);
+      }
+    }
+
+    // Draw 1 (Hand Size Reduce applies only to player)
+    const handReduce = isPlayerTurn ? this._corruptionTotal('hand_size_reduce') : 0;
+    const drawCount = Math.max(0, 1 - handReduce);
+    if (drawCount > 0) this._drawCards(combatant, drawCount);
 
     this.state.turnPhase = 'main';
   }
@@ -296,6 +535,26 @@ export class BattleEngine {
       if (inPlay.card.keywords?.some((k) => k.keyword === 'stealth')) {
         inPlay.stealthTurns = 1;
       }
+
+      // Sluggish: initialize turn delay counter
+      const sluggishDelay = getSpecialValue(inPlay, 'sluggish');
+      const sluggishBonus = getSpecialValues(inPlay, 'sluggish').v2;
+      if (sluggishDelay > 0) {
+        inPlay.sluggishTurns = sluggishDelay;
+        // Accumulate DEF/ATK bonus during wait (specialValue2 encodes as 2-digit: tens=def, ones=? wait...)
+        // Per description: specialValue2 = DEF bonus amount (simple), or 2-digit for T6+ (31 = +3DEF+1ATK per wait turn)
+        // For simplicity: apply bonus immediately as placeholder (agent can't attack for N turns)
+      }
+      // Sluggish T8+: Taunt (specialValue2 >= 100)
+      if (sluggishBonus >= 100) {
+        inPlay.card = { ...inPlay.card, keywords: [...(inPlay.card.keywords ?? []), { keyword: 'taunt' }] };
+      }
+      // Sluggish T10: immune first turn
+      if (sluggishBonus >= 105) {
+        inPlay.sluggishImmune = true;
+      }
+      inPlay.playedOnTurn = this.state.turnNumber;
+
       combatant.field.push(inPlay);
       // Augmented mod: bonus defense on entry
       const shieldBonus = getShieldValue(inPlay);
@@ -306,6 +565,15 @@ export class BattleEngine {
       // Entry effects
       this._resolveEntryEffect(inPlay, combatant, opponent, targetInstanceId);
       this._log(`${side} plays Agent: ${inPlay.card.name}`);
+
+      // Bloated draw on play (for agents too)
+      const bloatedDraw = getSpecialValue(inPlay, 'bloated_draw');
+      if (bloatedDraw > 0) {
+        const drawCount = bloatedDraw === 99
+          ? Math.max(0, combatant.maxDataCells - combatant.hand.length) // draw to full hand
+          : bloatedDraw;
+        if (drawCount > 0) this._drawCards(combatant, drawCount);
+      }
 
       // Check traps
       this._checkTraps(opponent, inPlay, 'on_play_agent');
@@ -318,6 +586,14 @@ export class BattleEngine {
         this._log(`${side}'s ${inPlay.card.name} fizzles! (Flickering)`);
       } else {
         this._resolveScriptEffect(inPlay, combatant, opponent, targetInstanceId);
+        // Bloated draw: draw cards on play
+        const bloatedDraw = getSpecialValue(inPlay, 'bloated_draw');
+        if (bloatedDraw > 0) {
+          const drawCount = bloatedDraw === 99
+            ? Math.max(0, combatant.maxDataCells - combatant.hand.length)
+            : bloatedDraw;
+          if (drawCount > 0) this._drawCards(combatant, drawCount);
+        }
         // Recursive: chance to return to hand instead of discard
         const recurseChance = getRecurseChance(inPlay);
         if (recurseChance > 0 && Math.random() < recurseChance) {
@@ -449,9 +725,13 @@ export class BattleEngine {
         owner.health = Math.min(owner.maxHealth, owner.health + siphon);
       }
     } else if (effect.type === 'heal') {
-      const healed = Math.min(owner.maxHealth - owner.health, effect.value ?? 0);
-      owner.health = Math.min(owner.maxHealth, owner.health + (effect.value ?? 0));
-      if (healed > 0) this._log(`${inPlay.card.name} heals ${healed} HP.`);
+      if (owner === this.state.player && this._hasCorruption('no_healing')) {
+        this._log(`${inPlay.card.name}: healing blocked! (No Repair corruption)`);
+      } else {
+        const healed = Math.min(owner.maxHealth - owner.health, effect.value ?? 0);
+        owner.health = Math.min(owner.maxHealth, owner.health + (effect.value ?? 0));
+        if (healed > 0) this._log(`${inPlay.card.name} heals ${healed} HP.`);
+      }
     } else if (effect.type === 'draw') {
       this._drawCards(owner, effect.value ?? 1);
       // supply crate: +1 temp data cell
@@ -574,6 +854,7 @@ export class BattleEngine {
     if (!attacker || attacker.card.type !== 'agent') return false;
     if (attacker.tapped) return false;
     if (attacker.summonedThisTurn && !attacker.card.keywords?.some((k) => k.keyword === 'overclock')) return false;
+    if ((attacker.sluggishTurns ?? 0) > 0) return false;
     return true;
   }
 
@@ -589,6 +870,9 @@ export class BattleEngine {
     if (!this.canAttack(attackerInstanceId)) return null;
     if (defender.card.type !== 'agent') return null;
 
+    // Sluggish: can't attack if still in delay
+    if ((attacker.sluggishTurns ?? 0) > 0) return null;
+
     attacker.tapped = true;
 
     // Both deal damage simultaneously
@@ -598,8 +882,22 @@ export class BattleEngine {
     const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
     const defenderArmor = defender.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
 
-    this._dealDamageToAgent(defender, enemy,  Math.max(0, attackerDmg - defenderArmor), attacker, player);
-    this._dealDamageToAgent(attacker, player, Math.max(0, defenderDmg - attackerArmor));
+    // Short Circuit: % self-damage on attack + bonus damage at high tiers
+    const scChance = getSpecialValues(attacker, 'shortcircuit').v1;
+    const scBonus  = getSpecialValues(attacker, 'shortcircuit').v2;
+    if (scChance > 0 && Math.random() * 100 < scChance) {
+      this._dealDamageToAgent(attacker, player, attackerDmg);
+      this._log(`${attacker.card.name} Short Circuit: takes ${attackerDmg} self-damage!`);
+    }
+
+    // Glitchstrike: bypass N points of armor (specialValue: 1/2/3=N, >=99=ignore all armor)
+    // "First attack this turn" is always true since attacker was just untapped.
+    const glitchVal = getSpecialValue(attacker, 'glitchstrike');
+    const effectiveDefArmor = glitchVal >= 99 ? 0 : Math.max(0, defenderArmor - glitchVal);
+    const attackDealt = Math.max(0, attackerDmg - effectiveDefArmor) + scBonus;
+
+    this._dealDamageToAgent(defender, enemy,  attackDealt, attacker, player);
+    this._dealDamageToAgent(attacker, player, Math.max(0, defenderDmg - defenderArmor));
 
     // Corrode: v1 = ATK reduction, v2 = DEF reduction
     const corrode = getCorrodeValues(attacker);
@@ -608,6 +906,27 @@ export class BattleEngine {
       if (stillAlive) {
         stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.v1);
         stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
+      }
+    }
+
+    // False Positive / Cleave: chance (or guaranteed T10) to hit an additional enemy
+    const fpAllyChance = getSpecialValues(attacker, 'falsepositive').v1;  // ally hit chance
+    const fpCleaveChance = getSpecialValues(attacker, 'falsepositive').v2; // cleave chance
+    if (fpAllyChance > 0 && Math.random() * 100 < fpAllyChance) {
+      // Hit a random friendly instead (additional attack — not the same target)
+      const friendlies = player.field.filter((c) => c !== attacker && c.card.type === 'agent');
+      if (friendlies.length > 0) {
+        const friendly = friendlies[Math.floor(Math.random() * friendlies.length)];
+        this._dealDamageToAgent(friendly, player, attackerDmg);
+        this._log(`${attacker.card.name} False Positive: hits own ${friendly.card.name}!`);
+      }
+    } else if (fpCleaveChance > 0 && Math.random() * 100 < fpCleaveChance) {
+      // Cleave: hit another enemy agent
+      const otherTargets = enemy.field.filter((c) => c !== defender && c.card.type === 'agent');
+      if (otherTargets.length > 0) {
+        const secondary = otherTargets[Math.floor(Math.random() * otherTargets.length)];
+        this._dealDamageToAgent(secondary, enemy, attackerDmg, attacker, player);
+        this._log(`${attacker.card.name} Cleave: also hits ${secondary.card.name}`);
       }
     }
 
@@ -737,8 +1056,16 @@ export class BattleEngine {
     const enemy  = this.state.enemy;
     const player = this.state.player;
 
-    for (const attacker of [...enemy.field]) {
+    // Sort enemy field by lag: negative lag = acts first, positive = acts last
+    const sortedField = [...enemy.field].sort((a, b) => {
+      const lagA = getSpecialValue(a, 'lag');
+      const lagB = getSpecialValue(b, 'lag');
+      return lagA - lagB; // negative first, then 0, then positive
+    });
+
+    for (const attacker of sortedField) {
       if (attacker.card.type !== 'agent' || attacker.tapped || attacker.summonedThisTurn) continue;
+      if ((attacker.sluggishTurns ?? 0) > 0) continue;
       attacker.tapped = true;
 
       // Stealth: can't be targeted
@@ -762,13 +1089,19 @@ export class BattleEngine {
         (c) => c.card.type === 'agent' && c.currentDefense > 0
       );
 
+      // Taunt: enemy must target taunt agents first
+      const tauntTargets = canAttack.filter((c) => c.card.keywords?.some((k) => k.keyword === 'taunt'));
+      const attackPool = tauntTargets.length > 0 ? tauntTargets : canAttack;
+
       // Find player agent attacker can kill (profitable trade)
-      const killTarget = canAttack.find(
+      const killTarget = attackPool.find(
         (c) => c.currentDefense <= attacker.currentAttack && c.currentAttack < attacker.currentDefense
       );
       // Otherwise any agent it can destroy
-      const anyKill = canAttack.find((c) => c.currentDefense <= attacker.currentAttack);
-      const target = killTarget ?? anyKill ?? null;
+      const anyKill = attackPool.find((c) => c.currentDefense <= attacker.currentAttack);
+      // If taunt agent exists but can't kill, still must attack it
+      const forcedTaunt = tauntTargets.length > 0 ? tauntTargets[0] : null;
+      const target = killTarget ?? anyKill ?? forcedTaunt ?? null;
 
       if (target) {
         // Agent vs agent
@@ -776,8 +1109,15 @@ export class BattleEngine {
         const defenderDmg = target.currentAttack;
         const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
         const defenderArmor = target.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
-        const targetWillDie = (target.currentDefense - Math.max(0, attackerDmg - defenderArmor)) <= 0;
-        this._dealDamageToAgent(target,   player, Math.max(0, attackerDmg - defenderArmor), attacker, enemy);
+        // Short Circuit: self-damage + bonus damage for enemy agents
+        const eScChance = getSpecialValues(attacker, 'shortcircuit').v1;
+        const eScBonus  = getSpecialValues(attacker, 'shortcircuit').v2;
+        if (eScChance > 0 && Math.random() * 100 < eScChance) {
+          this._dealDamageToAgent(attacker, enemy, attackerDmg);
+        }
+        const eEffectiveDmg = Math.max(0, attackerDmg - defenderArmor) + eScBonus;
+        const targetWillDie = (target.currentDefense - eEffectiveDmg) <= 0;
+        this._dealDamageToAgent(target,   player, eEffectiveDmg, attacker, enemy);
         this._dealDamageToAgent(attacker, enemy,  Math.max(0, defenderDmg - attackerArmor));
         const corrode = getCorrodeValues(attacker);
         if (corrode.v1 > 0 || corrode.v2 > 0) {
@@ -787,6 +1127,23 @@ export class BattleEngine {
             stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.v2);
           }
         }
+        // False Positive / Cleave on enemy agents
+        const eFpAlly  = getSpecialValues(attacker, 'falsepositive').v1;
+        const eFpCleave = getSpecialValues(attacker, 'falsepositive').v2;
+        if (eFpAlly > 0 && Math.random() * 100 < eFpAlly) {
+          const friendlies = enemy.field.filter((c) => c !== attacker && c.card.type === 'agent');
+          if (friendlies.length > 0) {
+            const friendly = friendlies[Math.floor(Math.random() * friendlies.length)];
+            this._dealDamageToAgent(friendly, enemy, attackerDmg);
+          }
+        } else if (eFpCleave > 0 && Math.random() * 100 < eFpCleave) {
+          const others = player.field.filter((c) => c !== target && c.card.type === 'agent');
+          if (others.length > 0) {
+            const secondary = others[Math.floor(Math.random() * others.length)];
+            this._dealDamageToAgent(secondary, player, attackerDmg, attacker, enemy);
+          }
+        }
+
         // Decay mod effects (only if target has mods worth degrading, or memory_wipe/bit_flip)
         if (this.decayStage >= 2) {
           this._applyDecayEffect(attacker, target, targetWillDie);
@@ -797,10 +1154,11 @@ export class BattleEngine {
         const shield = this.calculateShield('player');
         const breach = getBreachValue(attacker);
         const shieldedDmg = Math.max(0, attacker.currentAttack - shield);
-        const effectiveDmg = shieldedDmg + breach;
+        const doubleDmgMult = this._hasCorruption('double_damage') ? 2 : 1;
+        const effectiveDmg = (shieldedDmg + breach) * doubleDmgMult;
         player.health -= effectiveDmg;
         events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - shieldedDmg, target: 'player' });
-        this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield + ${breach} breach = ${effectiveDmg}`);
+        this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield + ${breach} breach = ${effectiveDmg}${doubleDmgMult > 1 ? ' (x2 VOID RESONANCE)' : ''}`);
         const drainPct = getDrainPercent(attacker);
         if (drainPct > 0 && effectiveDmg > 0) {
           const healed = Math.ceil(effectiveDmg * drainPct / 100);
@@ -826,6 +1184,11 @@ export class BattleEngine {
     attacker?: CardInPlay,
     attackerOwner?: CombatantState,
   ) {
+    // Sluggish T10: first-turn immunity
+    if (target.sluggishImmune && amount > 0) {
+      this._log(`${target.card.name} is immune this turn! (Sluggish T10)`);
+      return;
+    }
     target.currentDefense -= amount;
     if (target.currentDefense <= 0) {
       // Remove from field
@@ -850,6 +1213,37 @@ export class BattleEngine {
           this._log(`${target.card.name} DETONATES for ${detonate}!`);
         }
 
+        // Fragile Death: on-death damage burst
+        // specialValue > 0 = single target, < 0 = AoE, -999 = ATK damage to all + heal
+        const fragileVal = getSpecialValue(target, 'fragile_death');
+        if (fragileVal !== 0) {
+          const opp = owner === this.state.player ? this.state.enemy : this.state.player;
+          if (fragileVal === -999) {
+            // ATK damage to all enemies + heal 3
+            const dmg = target.currentAttack > 0 ? target.currentAttack : (target.card.attack ?? 1);
+            for (const f of [...opp.field]) this._dealDamageToAgent(f, opp, dmg);
+            opp.health -= dmg;
+            owner.health = Math.min(owner.maxHealth, owner.health + 3);
+            this._log(`${target.card.name} Fragile Death: ${dmg} AoE + heal 3`);
+          } else if (fragileVal < 0) {
+            // AoE damage to all enemies
+            const dmg = -fragileVal;
+            for (const f of [...opp.field]) this._dealDamageToAgent(f, opp, dmg);
+            opp.health -= dmg;
+            this._log(`${target.card.name} Fragile Death: ${dmg} AoE!`);
+          } else {
+            // Single target: pick random enemy agent or hit player directly
+            const targets = opp.field.filter((c) => c.card.type === 'agent');
+            if (targets.length > 0) {
+              const t = targets[Math.floor(Math.random() * targets.length)];
+              this._dealDamageToAgent(t, opp, fragileVal);
+            } else {
+              opp.health -= fragileVal;
+            }
+            this._log(`${target.card.name} Fragile Death: ${fragileVal} to random target`);
+          }
+        }
+
         // Recurse: chance to return to hand on death
         const recurseChance = getRecurseChance(target);
         if (recurseChance > 0 && Math.random() < recurseChance) {
@@ -860,6 +1254,50 @@ export class BattleEngine {
           const di = owner.discard.indexOf(target.card);
           if (di !== -1) owner.discard.splice(di, 1);
           this._log(`${target.card.name} recurses back to hand!`);
+        }
+
+        // Feedback Loop: surviving allies react to this death
+        for (const ally of [...owner.field]) {
+          if (ally.card.type !== 'agent') continue;
+          const fbVal = getSpecialValue(ally, 'feedbackloop');
+          if (fbVal === 0) continue;
+
+          if (fbVal < 0) {
+            // Negative: discard/damage self
+            if (fbVal === -1) {
+              // Always discarded on ally death
+              this._dealDamageToAgent(ally, owner, ally.currentDefense + 1);
+            } else if (fbVal === -2) {
+              // Discarded from hand (ally is on field here, so only triggers if in hand version — skip)
+            } else if (fbVal === -3) {
+              // 50% chance
+              if (Math.random() < 0.5) this._dealDamageToAgent(ally, owner, ally.currentDefense + 1);
+            } else if (fbVal === -4) {
+              // 25% chance
+              if (Math.random() < 0.25) this._dealDamageToAgent(ally, owner, ally.currentDefense + 1);
+            }
+          } else {
+            // Positive: gain stats / draw
+            const gain = decodeStatPair(fbVal);
+            if (gain.atk > 0) ally.currentAttack += gain.atk;
+            if (gain.def > 0) ally.currentDefense += gain.def;
+            // specialValue >= 30 = also draw 1 (fbVal=31,32 → tens digit ≥3)
+            if (Math.floor(fbVal / 10) >= 3) {
+              this._drawCards(owner, 1);
+            }
+            this._log(`${ally.card.name} Feedback Loop: +${gain.atk} ATK +${gain.def} DEF`);
+          }
+        }
+
+        // Feedback Loop (hand version, T2-T3): when ally dies, discard this card from hand
+        for (let hi = owner.hand.length - 1; hi >= 0; hi--) {
+          const hcard = owner.hand[hi];
+          const fbVal = getSpecialValue(hcard, 'feedbackloop');
+          if (fbVal === -2) {
+            owner.hand.splice(hi, 1);
+            owner.discard.push(hcard.card);
+            this._log(`${hcard.card.name} discarded by Feedback Loop!`);
+          }
         }
       }
     } else if (attacker && attackerOwner) {

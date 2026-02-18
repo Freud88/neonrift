@@ -262,57 +262,101 @@ export const MODS: Mod[] = [
   // T1 = max penalty, T10 = no penalty or small bonus
   // ══════════════════════════════════════════════════════════════════════
 
+  // Glitched: T1-T5 = -ATK penalty, T6-T7 = DEF-ignore on first attack, T8+ = bonus ATK + ignore all DEF
   {
     id: 'P28', name: 'Glitched', type: 'prefix', applicableTo: ['agent'], weight: 350,
-    tiers: build2(it(5), it(3), (aPen, dPen, i) => ({
-      description: aPen === 0 && dPen === 0
-        ? (i === 9 ? '+1 ATK' : 'No effect')
-        : dPen > 0 ? `-${aPen} ATK, -${dPen} DEF` : `-${aPen} ATK`,
-      atkBonus: aPen === 0 && i === 9 ? 1 : aPen > 0 ? -aPen : 0,
-      defBonus: dPen > 0 ? -dPen : 0,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '-5 ATK',                                        atkBonus: -5, isNegative: true }],
+      [2,  { description: '-4 ATK',                                        atkBonus: -4, isNegative: true }],
+      [3,  { description: '-3 ATK',                                        atkBonus: -3, isNegative: true }],
+      [4,  { description: '-2 ATK',                                        atkBonus: -2, isNegative: true }],
+      [5,  { description: '-1 ATK',                                        atkBonus: -1, isNegative: true }],
+      [6,  { description: '-1 ATK. First attack each turn ignores 1 DEF',  atkBonus: -1, special: 'glitchstrike', specialValue: 1, isNegative: true }],
+      [7,  { description: 'First attack each turn ignores 2 DEF',          special: 'glitchstrike', specialValue: 2 }],
+      [8,  { description: '+1 ATK. First attack ignores 3 DEF',            atkBonus: 1,  special: 'glitchstrike', specialValue: 3 }],
+      [9,  { description: '+1 ATK. First attack ignores all DEF',          atkBonus: 1,  special: 'glitchstrike', specialValue: 99 }],
+      [10, { description: '+2 ATK. Glitch Strike: all attacks ignore DEF', atkBonus: 2,  special: 'glitchstrike', specialValue: 999 }],
+    ]),
   },
+  // Fragile: T1-T5 = -DEF, T6-T7 = on-death burst, T8+ = bonus DEF + on-death AoE
   {
     id: 'P29', name: 'Fragile', type: 'prefix', applicableTo: ['agent'], weight: 300,
-    tiers: build(it(5), (v, i) => ({
-      description: v > 0 ? `-${v} DEF` : (i === 9 ? '+1 DEF' : 'No effect'),
-      defBonus: v > 0 ? -v : (i === 9 ? 1 : 0),
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '-5 DEF',                                               defBonus: -5, isNegative: true }],
+      [2,  { description: '-4 DEF',                                               defBonus: -4, isNegative: true }],
+      [3,  { description: '-3 DEF',                                               defBonus: -3, isNegative: true }],
+      [4,  { description: '-2 DEF',                                               defBonus: -2, isNegative: true }],
+      [5,  { description: '-1 DEF',                                               defBonus: -1, isNegative: true }],
+      [6,  { description: '-1 DEF. On death: 2 damage to a random enemy',         defBonus: -1, special: 'fragile_death', specialValue: 2, isNegative: true }],
+      [7,  { description: 'On death: 4 damage to a random enemy',                 special: 'fragile_death', specialValue: 4 }],
+      [8,  { description: '+1 DEF. On death: 4 damage to ALL enemies',            defBonus: 1,  special: 'fragile_death', specialValue: -4 }],
+      [9,  { description: '+2 DEF. On death: 6 damage to ALL enemies',            defBonus: 2,  special: 'fragile_death', specialValue: -6 }],
+      [10, { description: '+3 DEF. On death: ATK damage to all enemies + heal 3', defBonus: 3,  special: 'fragile_death', specialValue: -999 }],
+    ]),
   },
+  // Bloated: T1-T5 = +cost, T6-T7 = draws on play, T8+ = -cost + draws
   {
     id: 'P30', name: 'Bloated', type: 'prefix', applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 400,
-    tiers: build(it(4), (v, i) => ({
-      description: v > 0 ? `+${v} Cost` : (i === 9 ? '-1 Cost' : 'No effect'),
-      costIncrease: v > 0 ? v : undefined,
-      costReduction: i === 9 ? 1 : undefined,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '+4 Cost',                          costIncrease: 4, isNegative: true }],
+      [2,  { description: '+3 Cost',                          costIncrease: 3, isNegative: true }],
+      [3,  { description: '+3 Cost',                          costIncrease: 3, isNegative: true }],
+      [4,  { description: '+2 Cost',                          costIncrease: 2, isNegative: true }],
+      [5,  { description: '+1 Cost',                          costIncrease: 1, isNegative: true }],
+      [6,  { description: '+1 Cost. Draw 1 when played',      costIncrease: 1, special: 'bloated_draw', specialValue: 1, isNegative: true }],
+      [7,  { description: 'Draw 1 when played',               special: 'bloated_draw', specialValue: 1 }],
+      [8,  { description: '-1 Cost. Draw 1 when played',      costReduction: 1, special: 'bloated_draw', specialValue: 1 }],
+      [9,  { description: '-1 Cost. Draw 2 when played',      costReduction: 1, special: 'bloated_draw', specialValue: 2 }],
+      [10, { description: '-2 Cost. Data Overflow: draw to full hand when played', costReduction: 2, special: 'bloated_draw', specialValue: 99 }],
+    ]),
   },
+  // Unstable: T1-T5 = % self-destruct, T6-T7 = survives → gains stats, T8+ = guaranteed survive + permanent growth
   {
     id: 'P31', name: 'Unstable', type: 'prefix', applicableTo: ['agent'], weight: 250,
-    tiers: build(it(80), (v, i) => ({
-      description: v > 0 ? `${v}% self-destruct at end of turn` : 'Stable',
-      special: 'unstable', specialValue: v,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '80% self-destruct at end of turn',                     special: 'unstable', specialValue: 80, isNegative: true }],
+      [2,  { description: '70% self-destruct at end of turn',                     special: 'unstable', specialValue: 70, isNegative: true }],
+      [3,  { description: '55% self-destruct at end of turn',                     special: 'unstable', specialValue: 55, isNegative: true }],
+      [4,  { description: '40% self-destruct at end of turn',                     special: 'unstable', specialValue: 40, isNegative: true }],
+      [5,  { description: '25% self-destruct at end of turn',                     special: 'unstable', specialValue: 25, isNegative: true }],
+      [6,  { description: '15% self-destruct. If survives: +1 ATK permanently',   special: 'unstable', specialValue: 15, specialValue2: 1, isNegative: true }],
+      [7,  { description: '10% self-destruct. If survives: +2 ATK permanently',   special: 'unstable', specialValue: 10, specialValue2: 2, isNegative: true }],
+      [8,  { description: '5% self-destruct. If survives: +2 ATK +1 DEF permanently', special: 'unstable', specialValue: 5,  specialValue2: 21 }],
+      [9,  { description: '3% self-destruct. If survives: +2 ATK +1 DEF permanently', special: 'unstable', specialValue: 3,  specialValue2: 21 }],
+      [10, { description: 'Reactor Core: stable. Gains +2 ATK +1 DEF every turn', special: 'unstable', specialValue: 0,  specialValue2: 21 }],
+    ]),
   },
+  // Sluggish: T1-T4 = can't attack N turns, T5-T7 = 1 turn delay + bonus DEF, T8+ = no delay + Taunt
   {
     id: 'P32', name: 'Sluggish', type: 'prefix', applicableTo: ['agent'], weight: 300,
-    tiers: build(it(1), (v, i) => ({
-      description: v > 0 ? "Cannot attack the turn it's played" : 'No penalty',
-      special: 'sluggish', specialValue: v,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: "Cannot attack for 3 turns after deploy",      special: 'sluggish', specialValue: 3, isNegative: true }],
+      [2,  { description: "Cannot attack for 2 turns after deploy",      special: 'sluggish', specialValue: 2, isNegative: true }],
+      [3,  { description: "Cannot attack for 2 turns after deploy",      special: 'sluggish', specialValue: 2, isNegative: true }],
+      [4,  { description: "Cannot attack for 1 turn after deploy",       special: 'sluggish', specialValue: 1, isNegative: true }],
+      [5,  { description: "Cannot attack for 1 turn. +2 DEF per wait turn", special: 'sluggish', specialValue: 1, specialValue2: 2, isNegative: true }],
+      [6,  { description: "Cannot attack for 1 turn. +3 DEF +1 ATK per wait turn", special: 'sluggish', specialValue: 1, specialValue2: 31, isNegative: true }],
+      [7,  { description: "Cannot attack for 1 turn. +3 DEF +1 ATK per wait turn", special: 'sluggish', specialValue: 1, specialValue2: 31, isNegative: true }],
+      [8,  { description: "Attacks immediately. Taunt (enemies must target this)",  special: 'sluggish', specialValue: 0, specialValue2: 100 }],
+      [9,  { description: "Attacks immediately. Taunt. +2 DEF on deploy",           special: 'sluggish', specialValue: 0, specialValue2: 102, defBonus: 2 }],
+      [10, { description: "Fortified Deploy: attacks immediately. Taunt. +5 DEF. Immune first turn", special: 'sluggish', specialValue: 0, specialValue2: 105, defBonus: 5 }],
+    ]),
   },
+  // Leaking: T1-T4 = lose HP/turn, T5 = neutral, T6-T7 = lose HP but big ATK bonus, T8+ = regen
   {
     id: 'P33', name: 'Leaking', type: 'prefix', applicableTo: ['agent'], weight: 200,
-    tiers: build(it(2), (v, i) => ({
-      description: v > 0 ? `Lose ${v} HP at start of your turn while in play` : 'No effect',
-      special: 'leaking', specialValue: v,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'Lose 3 HP per turn while in play',                     special: 'leaking', specialValue: 3,  isNegative: true }],
+      [2,  { description: 'Lose 2 HP per turn while in play',                     special: 'leaking', specialValue: 2,  isNegative: true }],
+      [3,  { description: 'Lose 2 HP per turn while in play',                     special: 'leaking', specialValue: 2,  isNegative: true }],
+      [4,  { description: 'Lose 1 HP per turn while in play',                     special: 'leaking', specialValue: 1,  isNegative: true }],
+      [5,  { description: 'Lose 1 HP per turn while in play',                     special: 'leaking', specialValue: 1,  isNegative: true }],
+      [6,  { description: 'Lose 1 HP per turn. +3 ATK',                           special: 'leaking', specialValue: 1,  atkBonus: 3, isNegative: true }],
+      [7,  { description: 'Lose 1 HP per turn. +4 ATK',                           special: 'leaking', specialValue: 1,  atkBonus: 4, isNegative: true }],
+      [8,  { description: '+4 ATK. No HP loss',                                   special: 'leaking', specialValue: 0,  atkBonus: 4 }],
+      [9,  { description: 'Regen 1 HP per turn. +4 ATK',                          special: 'leaking', specialValue: -1, atkBonus: 4 }],
+      [10, { description: 'Life Siphon Field: regen 2 HP per turn. All allies +1 ATK', special: 'leaking', specialValue: -2, atkBonus: 4 }],
+    ]),
   },
   {
     id: 'P34', name: 'Draining', type: 'prefix', applicableTo: ['malware'], weight: 250,
@@ -330,13 +374,21 @@ export const MODS: Mod[] = [
       isNegative: i < 8,
     })),
   },
+  // Corroded: T1-T4 = lose ATK/DEF per turn, T5 = lose only DEF, T6+ = gain stats per turn
   {
     id: 'P36', name: 'Corroded', type: 'prefix', applicableTo: ['agent'], weight: 200,
-    tiers: build(it(2), (v, i) => ({
-      description: v > 0 ? `-${v} ATK per turn (min 0)` : 'No effect',
-      special: 'corroded', specialValue: v,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '-2 ATK and -2 DEF per turn',                 special: 'corroded', specialValue: -22, isNegative: true }],
+      [2,  { description: '-1 ATK and -1 DEF per turn',                 special: 'corroded', specialValue: -11, isNegative: true }],
+      [3,  { description: '-1 ATK and -1 DEF per turn',                 special: 'corroded', specialValue: -11, isNegative: true }],
+      [4,  { description: '-1 ATK per turn (min 0)',                     special: 'corroded', specialValue: -10, isNegative: true }],
+      [5,  { description: '-1 DEF per turn (min 1)',                     special: 'corroded', specialValue: -1,  isNegative: true }],
+      [6,  { description: '+1 ATK every 2 turns',                        special: 'corroded', specialValue: 5   }],
+      [7,  { description: '+1 ATK every turn',                           special: 'corroded', specialValue: 10  }],
+      [8,  { description: '+1 ATK and +1 DEF every turn',                special: 'corroded', specialValue: 11  }],
+      [9,  { description: '+2 ATK and +1 DEF every turn',                special: 'corroded', specialValue: 21  }],
+      [10, { description: 'Adaptive Alloy: +2 ATK +2 DEF every turn',    special: 'corroded', specialValue: 22  }],
+    ]),
   },
   {
     id: 'P37', name: 'Delayed', type: 'prefix', applicableTo: ['agent'], weight: 300,
@@ -370,13 +422,21 @@ export const MODS: Mod[] = [
       isNegative: i < 8,
     })),
   },
+  // Bricked: T1-T3 = can't attack, T4-T6 = partial attack, T7+ = full attack + bonus DEF/Taunt
   {
     id: 'P41', name: 'Bricked', type: 'prefix', applicableTo: ['agent'], weight: 300,
-    tiers: build(it(1), (v, i) => ({
-      description: v > 0 ? 'Cannot attack; contributes to shield only' : 'No restriction',
-      special: 'bricked', specialValue: v,
-      isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: "Cannot attack. Does not contribute to shield",          special: 'bricked', specialValue: 1,   isNegative: true }],
+      [2,  { description: "Cannot attack",                                          special: 'bricked', specialValue: 2,   isNegative: true }],
+      [3,  { description: "Cannot attack",                                          special: 'bricked', specialValue: 3,   isNegative: true }],
+      [4,  { description: "Can only attack if alone on field",                      special: 'bricked', specialValue: 4,   isNegative: true }],
+      [5,  { description: "Can only attack every 2 turns",                          special: 'bricked', specialValue: 5,   isNegative: true }],
+      [6,  { description: "Can only attack Agents (not player directly)",           special: 'bricked', specialValue: 6,   isNegative: true }],
+      [7,  { description: "Attacks normally. +2 DEF",                              special: 'bricked', specialValue: 0,   defBonus: 2 }],
+      [8,  { description: "Attacks normally. +3 DEF. Taunt",                       special: 'bricked', specialValue: 0,   defBonus: 3, specialValue2: 1 }],
+      [9,  { description: "+4 DEF. Taunt. Counterattacks for double damage",        special: 'bricked', specialValue: 0,   defBonus: 4, specialValue2: 2 }],
+      [10, { description: "Firewall Mode: +5 DEF. Taunt. Armor 2. Full counterattack", special: 'bricked', specialValue: 0, defBonus: 5, specialValue2: 3 }],
+    ]),
   },
   {
     id: 'P42', name: 'Backdated', type: 'prefix', applicableTo: ['agent'], weight: 250,
@@ -605,19 +665,37 @@ export const MODS: Mod[] = [
   // T1 = max penalty, T10 = no penalty
   // ══════════════════════════════════════════════════════════════════════
 
+  // Static: T1-T4 = locked target (if dies: skip turn), T5+ = bonus on repeat attacks, T10 = Target Lock
   {
     id: 'S31', name: 'of Static', type: 'suffix', applicableTo: ['agent'], weight: 300,
-    tiers: build(it(1), (v, i) => ({
-      description: v > 0 ? 'Must always attack the same target' : 'No restriction',
-      special: 'static', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'Must attack same target. If it dies: skip attack',     special: 'static', specialValue: 1, isNegative: true }],
+      [2,  { description: 'Must attack same target. If it dies: pick new one',    special: 'static', specialValue: 2, isNegative: true }],
+      [3,  { description: 'Must attack same target. Free to switch if it dies',   special: 'static', specialValue: 3, isNegative: true }],
+      [4,  { description: 'Must attack same target. Free to switch if it dies',   special: 'static', specialValue: 3, isNegative: true }],
+      [5,  { description: '+1 damage vs fixed target',                            special: 'static', specialValue: 0, specialValue2: 1, isNegative: true }],
+      [6,  { description: '+2 damage vs fixed target',                            special: 'static', specialValue: 0, specialValue2: 2 }],
+      [7,  { description: '+3 damage vs any target, free to switch',              special: 'static', specialValue: 0, specialValue2: 3 }],
+      [8,  { description: '+2 damage on first attack vs each new target',         special: 'static', specialValue: 0, specialValue2: 20 }],
+      [9,  { description: '+3 damage on first attack vs each new target',         special: 'static', specialValue: 0, specialValue2: 30 }],
+      [10, { description: 'Target Lock: +4 dmg. 3rd consecutive hit = triple dmg', special: 'static', specialValue: 0, specialValue2: 40 }],
+    ]),
   },
+  // Feedback Loop: T1-T3 = discard when ally dies, T4-T5 = chance, T6+ = gain stats on ally death
   {
     id: 'S32', name: 'of Feedback Loop', type: 'suffix', applicableTo: ['agent'], weight: 300,
-    tiers: build(it(2), (v, i) => ({
-      description: v > 0 ? `On death: discard ${v} random card${v > 1 ? 's' : ''}` : 'No effect',
-      special: 'feedbackloop', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'When any ally dies: this card is discarded',              special: 'feedbackloop', specialValue: -1, isNegative: true }],
+      [2,  { description: 'When ally dies: discarded if in hand (not field)',        special: 'feedbackloop', specialValue: -2, isNegative: true }],
+      [3,  { description: 'When ally dies: discarded if in hand',                   special: 'feedbackloop', specialValue: -2, isNegative: true }],
+      [4,  { description: '50% chance to discard when ally dies',                   special: 'feedbackloop', specialValue: -3, isNegative: true }],
+      [5,  { description: '25% chance to discard when ally dies',                   special: 'feedbackloop', specialValue: -4, isNegative: true }],
+      [6,  { description: 'When ally dies: +1 ATK',                                 special: 'feedbackloop', specialValue: 1  }],
+      [7,  { description: 'When ally dies: +2 ATK',                                 special: 'feedbackloop', specialValue: 2  }],
+      [8,  { description: 'When ally dies: +2 ATK +1 DEF',                          special: 'feedbackloop', specialValue: 21 }],
+      [9,  { description: 'When ally dies: +3 ATK +1 DEF, draw 1',                  special: 'feedbackloop', specialValue: 31 }],
+      [10, { description: 'Avenger: when ally dies: +3 ATK +2 DEF, draw 1, next attack double dmg', special: 'feedbackloop', specialValue: 32 }],
+    ]),
   },
   {
     id: 'S33', name: 'of the Breach', type: 'suffix', applicableTo: ['agent'], weight: 350,
@@ -626,26 +704,53 @@ export const MODS: Mod[] = [
       special: 'breach', specialValue: v, isNegative: i < 8,
     })),
   },
+  // Short Circuit: T1-T5 = self-damage %, T6-T7 = low chance + bonus dmg, T8+ = no risk + bonus effects
   {
     id: 'S34', name: 'of Short Circuit', type: 'suffix', applicableTo: ['agent'], weight: 250,
-    tiers: build(it(40), (v, i) => ({
-      description: v > 0 ? `On attack: ${v}% chance to take 1 self-damage` : 'No penalty',
-      special: 'shortcircuit', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'On attack: 50% chance to take ATK self-damage',          special: 'shortcircuit', specialValue: 50, isNegative: true }],
+      [2,  { description: 'On attack: 40% chance to take ATK self-damage',          special: 'shortcircuit', specialValue: 40, isNegative: true }],
+      [3,  { description: 'On attack: 30% chance to take ATK self-damage',          special: 'shortcircuit', specialValue: 30, isNegative: true }],
+      [4,  { description: 'On attack: 25% chance to take ATK self-damage',          special: 'shortcircuit', specialValue: 25, isNegative: true }],
+      [5,  { description: 'On attack: 15% chance to take ATK self-damage',          special: 'shortcircuit', specialValue: 15, isNegative: true }],
+      [6,  { description: '10% self-damage. If no misfire: +1 bonus damage',        special: 'shortcircuit', specialValue: 10, specialValue2: 1, isNegative: true }],
+      [7,  { description: '5% self-damage. If no misfire: +2 bonus damage',         special: 'shortcircuit', specialValue: 5,  specialValue2: 2, isNegative: true }],
+      [8,  { description: '+2 bonus damage on all attacks',                          special: 'shortcircuit', specialValue: 0,  specialValue2: 2 }],
+      [9,  { description: '+3 bonus damage. 15% stun on hit',                        special: 'shortcircuit', specialValue: 0,  specialValue2: 3 }],
+      [10, { description: 'Overcharge: +4 dmg. 25% stun. Hits all enemies on attack', special: 'shortcircuit', specialValue: 0, specialValue2: 4 }],
+    ]),
   },
+  // Lag: T1-T2 = acts last + ATK pen, T3-T4 = acts last, T5-T6 = acts last + DEF bonus, T7-T8+ = normal/first
   {
     id: 'S35', name: 'of Lag', type: 'suffix', applicableTo: ['agent'], weight: 250,
-    tiers: build(it(1), (v, i) => ({
-      description: v > 0 ? 'This Agent always acts last' : 'No penalty',
-      special: 'lag', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'Acts last. -2 ATK',    atkBonus: -2, special: 'lag', specialValue: 1, isNegative: true }],
+      [2,  { description: 'Acts last. -1 ATK',    atkBonus: -1, special: 'lag', specialValue: 1, isNegative: true }],
+      [3,  { description: 'Acts last',                          special: 'lag', specialValue: 1, isNegative: true }],
+      [4,  { description: 'Acts last',                          special: 'lag', specialValue: 1, isNegative: true }],
+      [5,  { description: 'Acts last. +2 DEF',    defBonus: 2,  special: 'lag', specialValue: 1, isNegative: true }],
+      [6,  { description: 'Acts last. +2 DEF. If no ally died this turn: +2 ATK', defBonus: 2, special: 'lag', specialValue: 2, isNegative: true }],
+      [7,  { description: 'Normal order. +2 DEF', defBonus: 2,  special: 'lag', specialValue: 0 }],
+      [8,  { description: 'Acts FIRST. +1 ATK',   atkBonus: 1,  special: 'lag', specialValue: -1 }],
+      [9,  { description: 'Acts FIRST. +2 ATK',   atkBonus: 2,  special: 'lag', specialValue: -1 }],
+      [10, { description: 'Priority Override: acts first. +3 ATK. Pre-emptive strike.', atkBonus: 3, special: 'lag', specialValue: -2 }],
+    ]),
   },
+  // Memory Leak: T1-T4 = cost +N per turn in hand, T5 = neutral, T6+ = cost decreases per turn in hand
   {
     id: 'S36', name: 'of Memory Leak', type: 'suffix', applicableTo: ['agent'], weight: 200,
-    tiers: build(it(2), (v, i) => ({
-      description: v > 0 ? `Each turn in play: +${v} cost to cards in hand` : 'No effect',
-      special: 'memleak', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'Each turn in hand: +1 cost',                                    special: 'memleak', specialValue: 1,  isNegative: true }],
+      [2,  { description: 'Each 2 turns in hand: +1 cost',                                 special: 'memleak', specialValue: 2,  isNegative: true }],
+      [3,  { description: 'Each 2 turns in hand: +1 cost',                                 special: 'memleak', specialValue: 3,  isNegative: true }],
+      [4,  { description: 'Each 3 turns in hand: +1 cost',                                 special: 'memleak', specialValue: 4,  isNegative: true }],
+      [5,  { description: 'No cost change',                                                 special: 'memleak', specialValue: 0  }],
+      [6,  { description: 'Each 3 turns in hand: -1 cost (min 0)',                          special: 'memleak', specialValue: -4 }],
+      [7,  { description: 'Each 2 turns in hand: -1 cost (min 0)',                          special: 'memleak', specialValue: -3 }],
+      [8,  { description: 'Each turn in hand: -1 cost (min 0)',                             special: 'memleak', specialValue: -1 }],
+      [9,  { description: 'Each turn: -1 cost. At 0 cost: +2 ATK bonus',                   special: 'memleak', specialValue: -1, specialValue2: 1 }],
+      [10, { description: 'Memory Compression: -1 cost/turn. At 0 cost: played twice',     special: 'memleak', specialValue: -1, specialValue2: 2 }],
+    ]),
   },
   {
     id: 'S37', name: 'of Bloatware', type: 'suffix', applicableTo: ['agent'], weight: 300,
@@ -661,12 +766,21 @@ export const MODS: Mod[] = [
       special: 'telemetry', specialValue: v, isNegative: i < 8,
     })),
   },
+  // False Positive: T1-T5 = % attacks ally, T6-T7 = small cleave, T8+ = full cleave / berserker
   {
     id: 'S39', name: 'of False Positive', type: 'suffix', applicableTo: ['agent'], weight: 200,
-    tiers: build(it(50), (v, i) => ({
-      description: v > 0 ? `${v}% chance to attack a random ally instead` : 'No penalty',
-      special: 'falsepositive', specialValue: v, isNegative: i < 8,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: '50% chance to attack a random ally instead',            special: 'falsepositive', specialValue: 50, isNegative: true }],
+      [2,  { description: '40% chance to attack a random ally instead',            special: 'falsepositive', specialValue: 40, isNegative: true }],
+      [3,  { description: '35% chance to attack a random ally instead',            special: 'falsepositive', specialValue: 35, isNegative: true }],
+      [4,  { description: '25% chance to attack a random ally instead',            special: 'falsepositive', specialValue: 25, isNegative: true }],
+      [5,  { description: '15% chance to attack a random ally instead',            special: 'falsepositive', specialValue: 15, isNegative: true }],
+      [6,  { description: '5% ally hit. 15% chance to hit a second enemy',         special: 'falsepositive', specialValue: 5,  specialValue2: 15, isNegative: true }],
+      [7,  { description: 'No ally hits. 20% chance to hit a second enemy',        special: 'falsepositive', specialValue: 0,  specialValue2: 20 }],
+      [8,  { description: '30% cleave (hits target + 1 additional enemy)',          special: 'falsepositive', specialValue: 0,  specialValue2: 30 }],
+      [9,  { description: '40% cleave on every attack',                            special: 'falsepositive', specialValue: 0,  specialValue2: 40 }],
+      [10, { description: 'Berserker Mode: always attacks 2 enemies. +2 ATK',      special: 'falsepositive', specialValue: 0,  specialValue2: 100, atkBonus: 2 }],
+    ]),
   },
   {
     id: 'S40', name: 'of Slow Boot', type: 'suffix', applicableTo: ['agent'], weight: 300,
@@ -703,53 +817,139 @@ export const MODS: Mod[] = [
       special: 'cachemiss', specialValue: v, isNegative: i < 8,
     })),
   },
+  // Planned Obsolescence: T1-T5 = self-destructs after N turns, T6+ = bonus on death, T9-T10 = eternal
   {
     id: 'S45', name: 'of Planned Obsolescence', type: 'suffix', applicableTo: ['agent'], weight: 250,
-    tiers: build(nt(2, 99), (v, i) => ({
-      description: v >= 99 ? 'Never self-destructs' : `Self-destructs after ${v} turns`,
-      special: 'obsolete', specialValue: v, isNegative: i < 7,
-    })),
+    tiers: Object.fromEntries([
+      [1,  { description: 'Self-destructs after 2 turns',                         special: 'obsolete', specialValue: 2,  isNegative: true }],
+      [2,  { description: 'Self-destructs after 2 turns',                         special: 'obsolete', specialValue: 2,  isNegative: true }],
+      [3,  { description: 'Self-destructs after 3 turns',                         special: 'obsolete', specialValue: 3,  isNegative: true }],
+      [4,  { description: 'Self-destructs after 3 turns',                         special: 'obsolete', specialValue: 3,  isNegative: true }],
+      [5,  { description: 'Self-destructs after 4 turns',                         special: 'obsolete', specialValue: 4,  isNegative: true }],
+      [6,  { description: 'After 5 turns: destroyed + draw 1',                    special: 'obsolete', specialValue: 5,  specialValue2: 1 }],
+      [7,  { description: 'After 6 turns: destroyed + draw 2 + 3 dmg to a foe',   special: 'obsolete', specialValue: 6,  specialValue2: 2 }],
+      [8,  { description: 'After 8 turns: destroyed + 4 AoE dmg',                 special: 'obsolete', specialValue: 8,  specialValue2: 4 }],
+      [9,  { description: 'Never self-destructs',                                  special: 'obsolete', specialValue: 99 }],
+      [10, { description: 'Eternal License: never destructs. +2 ATK. Every 4 turns: draw 1 + heal 1', special: 'obsolete', specialValue: 99, specialValue2: 10, atkBonus: 2 }],
+    ]),
   },
 
   // ══════════════════════════════════════════════════════════════════════
-  // SUFFIXES — USELESS (Weight 300–400)
-  // T1-T7: no effect. T8: +1 ATK. T9: +1/+1. T10: +2/+2.
+  // SUFFIXES — USELESS → UNIQUE T6-T10 EFFECTS (Weight 300–400)
+  // T1-T5: no effect. T6-T10: unique tematic payoff per mod.
   // ══════════════════════════════════════════════════════════════════════
 
   {
     id: 'S46', name: 'of Noise', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 400,
-    tiers: uselessTiers('Signal interference detected'),
+    tiers: Object.fromEntries([
+      [1, { description: 'Signal interference detected', isUseless: true }],
+      [2, { description: 'Signal interference detected', isUseless: true }],
+      [3, { description: 'Signal interference detected', isUseless: true }],
+      [4, { description: 'Signal interference detected', isUseless: true }],
+      [5, { description: 'Signal interference detected', isUseless: true }],
+      [6, { description: 'Generate 1 credit per battle',           special: 'noise_credits', specialValue: 1  }],
+      [7, { description: 'Generate 2 credits per battle',          special: 'noise_credits', specialValue: 2  }],
+      [8, { description: 'Generate 3 credits per battle',          special: 'noise_credits', specialValue: 3  }],
+      [9, { description: 'Generate 5 credits per battle',          special: 'noise_credits', specialValue: 5  }],
+      [10, { description: 'White Noise Field: 5 credits per battle + 10% enemy confusion per turn', special: 'noise_credits', specialValue: 5, specialValue2: 10 }],
+    ]),
   },
   {
     id: 'S47', name: 'of Deprecated Code', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 400,
-    tiers: uselessTiers('Legacy compatibility layer'),
+    tiers: Object.fromEntries([
+      [1, { description: 'Legacy compatibility layer', isUseless: true }],
+      [2, { description: 'Legacy compatibility layer', isUseless: true }],
+      [3, { description: 'Legacy compatibility layer', isUseless: true }],
+      [4, { description: 'Legacy compatibility layer', isUseless: true }],
+      [5, { description: 'Legacy compatibility layer', isUseless: true }],
+      [6,  { description: 'On death: leave a 1/1 Legacy Process token', special: 'deprecated_token', specialValue: 1  }],
+      [7,  { description: 'On death: leave a 2/2 Legacy Process token', special: 'deprecated_token', specialValue: 2  }],
+      [8,  { description: 'On death: leave a 3/3 Legacy Process token', special: 'deprecated_token', specialValue: 3  }],
+      [9,  { description: 'On death: leave a 3/3 token with Taunt',     special: 'deprecated_token', specialValue: 4  }],
+      [10, { description: 'Legacy Mainframe: on death, clone this Agent at base stats', special: 'deprecated_token', specialValue: 99 }],
+    ]),
   },
   {
     id: 'S48', name: 'of Legacy Systems', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 350,
-    tiers: uselessTiers('Backward compatible (unused)'),
+    tiers: Object.fromEntries([
+      [1, { description: 'Backward compatible (unused)', isUseless: true }],
+      [2, { description: 'Backward compatible (unused)', isUseless: true }],
+      [3, { description: 'Backward compatible (unused)', isUseless: true }],
+      [4, { description: 'Backward compatible (unused)', isUseless: true }],
+      [5, { description: 'Backward compatible (unused)', isUseless: true }],
+      [6,  { description: '+1 DEF',                               defBonus: 1  }],
+      [7,  { description: '+2 DEF',                               defBonus: 2  }],
+      [8,  { description: '+3 DEF',                               defBonus: 3  }],
+      [9,  { description: '+3 DEF. Armor 1',                      defBonus: 3,  special: 'armor', specialValue: 1 }],
+      [10, { description: 'Legacy Firewall: +5 DEF. Armor 2',     defBonus: 5,  special: 'armor', specialValue: 2 }],
+    ]),
   },
   {
     id: 'S49', name: 'of Dead Code', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 350,
-    tiers: uselessTiers('Unreachable branch'),
+    tiers: Object.fromEntries([
+      [1, { description: 'Unreachable branch', isUseless: true }],
+      [2, { description: 'Unreachable branch', isUseless: true }],
+      [3, { description: 'Unreachable branch', isUseless: true }],
+      [4, { description: 'Unreachable branch', isUseless: true }],
+      [5, { description: 'Unreachable branch', isUseless: true }],
+      [6,  { description: 'In discard: all allies +1 ATK',                special: 'dead_code', specialValue: 1  }],
+      [7,  { description: 'In discard: all allies +1 ATK +1 DEF',         special: 'dead_code', specialValue: 11 }],
+      [8,  { description: 'In discard: all allies +2 ATK',                special: 'dead_code', specialValue: 20 }],
+      [9,  { description: 'In discard: all allies +2 ATK +1 DEF',         special: 'dead_code', specialValue: 21 }],
+      [10, { description: 'Necro Process: +3 ATK +2 DEF to allies. Can be recalled once from discard', special: 'dead_code', specialValue: 32 }],
+    ]),
   },
   {
     id: 'S50', name: 'of Lorem Ipsum', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 300,
-    tiers: uselessTiers('Placeholder text remaining'),
+    tiers: Object.fromEntries([
+      [1, { description: 'Placeholder text remaining', isUseless: true }],
+      [2, { description: 'Placeholder text remaining', isUseless: true }],
+      [3, { description: 'Placeholder text remaining', isUseless: true }],
+      [4, { description: 'Placeholder text remaining', isUseless: true }],
+      [5, { description: 'Placeholder text remaining', isUseless: true }],
+      [6,  { description: '10% chance enemy skips action per turn (confused)',    special: 'lorem_confuse', specialValue: 10 }],
+      [7,  { description: '15% chance enemy skips action per turn',               special: 'lorem_confuse', specialValue: 15 }],
+      [8,  { description: '20% chance enemy skips action per turn',               special: 'lorem_confuse', specialValue: 20 }],
+      [9,  { description: '25% chance enemy skips action per turn',               special: 'lorem_confuse', specialValue: 25 }],
+      [10, { description: 'Incomprehensible: 30% per turn enemy cannot play cards', special: 'lorem_confuse', specialValue: 30 }],
+    ]),
   },
   {
     id: 'S51', name: 'of TODO', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 350,
-    tiers: uselessTiers('// TODO: implement later'),
+    tiers: Object.fromEntries([
+      [1, { description: '// TODO: implement later', isUseless: true }],
+      [2, { description: '// TODO: implement later', isUseless: true }],
+      [3, { description: '// TODO: implement later', isUseless: true }],
+      [4, { description: '// TODO: implement later', isUseless: true }],
+      [5, { description: '// TODO: implement later', isUseless: true }],
+      [6,  { description: '10% bonus card drop after battle',  special: 'todo_drop', specialValue: 10 }],
+      [7,  { description: '15% bonus card drop after battle',  special: 'todo_drop', specialValue: 15 }],
+      [8,  { description: '20% bonus card drop after battle',  special: 'todo_drop', specialValue: 20 }],
+      [9,  { description: '30% bonus card drop after battle',  special: 'todo_drop', specialValue: 30 }],
+      [10, { description: 'Completed TODO: guaranteed bonus drop + extra mod on dropped card', special: 'todo_drop', specialValue: 100 }],
+    ]),
   },
   {
     id: 'S52', name: 'of FIXME', type: 'suffix',
     applicableTo: ['agent', 'script', 'malware', 'trap'], weight: 300,
-    tiers: uselessTiers('// FIXME: known issue'),
+    tiers: Object.fromEntries([
+      [1, { description: '// FIXME: known issue', isUseless: true }],
+      [2, { description: '// FIXME: known issue', isUseless: true }],
+      [3, { description: '// FIXME: known issue', isUseless: true }],
+      [4, { description: '// FIXME: known issue', isUseless: true }],
+      [5, { description: '// FIXME: known issue', isUseless: true }],
+      [6,  { description: '5% chance: auto-upgrade 1 mod +1 tier after battle',   special: 'fixme_patch', specialValue: 5  }],
+      [7,  { description: '10% chance: auto-upgrade 1 mod +1 tier after battle',  special: 'fixme_patch', specialValue: 10 }],
+      [8,  { description: '15% chance: auto-upgrade 1 mod +1 tier after battle',  special: 'fixme_patch', specialValue: 15 }],
+      [9,  { description: '20% chance: auto-upgrade 1 mod +1 tier after battle',  special: 'fixme_patch', specialValue: 20 }],
+      [10, { description: 'Auto-Patch: 30% after battle — card self-improves over time', special: 'fixme_patch', specialValue: 30 }],
+    ]),
   },
 
   // ── Shield bypass ────────────────────────────────────────────────────

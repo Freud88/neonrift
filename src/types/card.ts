@@ -1,7 +1,7 @@
 export type EnergyType = 'volt' | 'cipher' | 'rust' | 'phantom' | 'synth' | 'neutral';
 export type CardType = 'agent' | 'script' | 'malware' | 'trap';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'legendary';
-export type Keyword = 'overclock' | 'decrypt' | 'stealth' | 'armor' | 'regen';
+export type Keyword = 'overclock' | 'decrypt' | 'stealth' | 'armor' | 'regen' | 'taunt';
 
 // ── Mod system ────────────────────────────────────────────────────────────────
 export type ModRarity = 'common' | 'coded' | 'enhanced' | 'overclocked' | 'corrupted' | 'mythic';
@@ -69,4 +69,12 @@ export interface CardInPlay {
   buffs: { attack: number; defense: number; source: string }[];
   /** Remaining extra triggers from Layered mod (undefined = not layered) */
   layeredCharges?: number;
+  /** Remaining turns this agent cannot attack (Sluggish mod) */
+  sluggishTurns?: number;
+  /** Whether this agent has immunity this turn (Sluggish T10) */
+  sluggishImmune?: boolean;
+  /** Turn number when this agent was played (for Corroded T6 every-2-turns check) */
+  playedOnTurn?: number;
+  /** Number of turns this card has been in hand (for Memory Leak mod) */
+  turnsInHand?: number;
 }

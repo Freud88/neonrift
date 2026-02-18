@@ -68,7 +68,8 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     // Set rift level for tier rolling (higher zone = better enemy mod tiers)
     setRiftLevelForTierRoll(activeZone?.config.level ?? 0);
     const decayStage = activeZone?.riftClock?.currentStage ?? 0;
-    startBattle(gameState.deck, enemyProfileId, overrideProfile, decayStage);
+    const activeCorruptions = activeZone?.activeCorruptions ?? [];
+    startBattle(gameState.deck, enemyProfileId, overrideProfile, decayStage, activeCorruptions);
     return () => clearBattle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
