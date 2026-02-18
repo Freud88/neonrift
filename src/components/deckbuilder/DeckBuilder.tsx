@@ -93,7 +93,10 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
       if (filterEnergy !== 'all' && c.energy !== filterEnergy) return false;
       if (filterType !== 'all' && c.type !== filterType) return false;
       if (filterCost !== 'all' && c.cost !== filterCost) return false;
-      if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search) {
+        const displayName = (c.mods?.displayName ?? c.name).toLowerCase();
+        if (!displayName.includes(search.toLowerCase()) && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+      }
       return true;
     }).sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   }, [uniqueCollection, filterEnergy, filterType, filterCost, search]);
@@ -339,6 +342,8 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
                     cursor: 'pointer',
                   }}
                   onClick={() => removeFromDeck(card)}
+                  onMouseEnter={() => setPreviewCard(card)}
+                  onMouseLeave={() => setPreviewCard(null)}
                 >
                   <span style={{
                     fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
@@ -352,7 +357,7 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
                     color: '#e0e0ff', flex: 1,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
-                    {card.name}
+                    {card.mods?.displayName ?? card.name}
                   </span>
                   <span style={{
                     fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
