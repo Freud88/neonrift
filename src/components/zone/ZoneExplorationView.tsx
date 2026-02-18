@@ -13,6 +13,7 @@ interface ZoneExplorationViewProps {
   zoneState: ZoneState;
   onEnemyBattle: (enemyKey: string, profileSeed: string) => void;
   onCacheLoot: (cacheKey: string, cacheSeed: string) => void;
+  onBossBattle: () => void;
   onExit: () => void;
   onForgeKey: () => void;
   isActive: boolean;
@@ -23,6 +24,7 @@ export default function ZoneExplorationView({
   zoneState,
   onEnemyBattle,
   onCacheLoot,
+  onBossBattle,
   onExit,
   onForgeKey,
   isActive,
@@ -45,18 +47,42 @@ export default function ZoneExplorationView({
     [onCacheLoot],
   );
 
-  const { engineRef, entitiesRef, resetContactCooldown } = useZoneExploration(
+  const handleBossContact: ZoneCallbacks['onBossContact'] = useCallback(() => {
+    onBossBattle();
+  }, [onBossBattle]);
+
+  const { engineRef, entitiesRef, resetContactCooldown, spawnBoss, markBossDefeated } = useZoneExploration(
     canvasRef,
     zoneConfig,
     zoneState,
-    { onEnemyContact: handleEnemyContact, onCacheContact: handleCacheContact },
+    { onEnemyContact: handleEnemyContact, onCacheContact: handleCacheContact, onBossContact: handleBossContact },
     joystick,
     isActive,
   );
 
+  // Spawn boss when key is forged
+  const prevBossSpawned = useRef(false);
+  useEffect(() => {
+    if (zoneState.bossSpawned && !prevBossSpawned.current) {
+      prevBossSpawned.current = true;
+      spawnBoss();
+    }
+  }, [zoneState.bossSpawned, spawnBoss]);
+
+  // Mark boss defeated visually
+  useEffect(() => {
+    if (zoneState.bossDefeated) {
+      markBossDefeated();
+    }
+  }, [zoneState.bossDefeated, markBossDefeated]);
+
   useEffect(() => {
     if (isActive) resetContactCooldown();
   }, [isActive, resetContactCooldown]);
+
+  const handleForgeKey = useCallback(() => {
+    onForgeKey();
+  }, [onForgeKey]);
 
   return (
     <div className="relative w-full h-full overflow-hidden" style={{ background: '#0a0a0f' }}>
@@ -74,7 +100,7 @@ export default function ZoneExplorationView({
         engineRef={engineRef}
         entitiesRef={entitiesRef}
         onExit={onExit}
-        onForgeKey={onForgeKey}
+        onForgeKey={handleForgeKey}
       />
 
       <div

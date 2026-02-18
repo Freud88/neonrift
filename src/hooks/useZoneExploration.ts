@@ -21,6 +21,7 @@ const CONTACT_COOLDOWN = 5000;
 export interface ZoneCallbacks {
   onEnemyContact: (enemyKey: string, profileSeed: string) => void;
   onCacheContact: (cacheKey: string, cacheSeed: string) => void;
+  onBossContact: () => void;
 }
 
 export function useZoneExploration(
@@ -260,6 +261,12 @@ export function useZoneExploration(
                 }
               }
             }
+          } else if (e.type === 'boss_gate' && e.id === 'zone_boss') {
+            const contactRange = pl.radius + e.radius;
+            if (dist < contactRange && now - lastInteraction.current > CONTACT_COOLDOWN) {
+              lastInteraction.current = now;
+              callbacksRef.current.onBossContact();
+            }
           }
         }
       }
@@ -294,5 +301,33 @@ export function useZoneExploration(
     lastInteraction.current = Date.now() - CONTACT_COOLDOWN + 1500;
   }, []);
 
-  return { engineRef, entitiesRef, markEnemyDefeated, markCacheLooted, resetContactCooldown };
+  /** Spawn the zone boss entity 2 chunks away from the player. */
+  const spawnBoss = useCallback(() => {
+    const pl = playerRef.current;
+    if (!pl) return;
+    // Spawn boss 2 chunks (32 tiles) to the right and 1 chunk down from player
+    const bossX = pl.x + CHUNK_SIZE * TILE_SIZE * 2;
+    const bossY = pl.y + CHUNK_SIZE * TILE_SIZE;
+    const boss: SpriteEntity = {
+      id: 'zone_boss',
+      type: 'boss_gate',
+      x: bossX,
+      y: bossY,
+      vx: 0,
+      vy: 0,
+      radius: 18,
+      color: '#ff0044',
+      glowColor: '#ff0044',
+      isBoss: true,
+      label: 'RIFT GATE',
+    };
+    entitiesRef.current.push(boss);
+  }, []);
+
+  const markBossDefeated = useCallback(() => {
+    const e = entitiesRef.current.find((en) => en.id === 'zone_boss');
+    if (e) e.defeated = true;
+  }, []);
+
+  return { engineRef, entitiesRef, markEnemyDefeated, markCacheLooted, resetContactCooldown, spawnBoss, markBossDefeated };
 }

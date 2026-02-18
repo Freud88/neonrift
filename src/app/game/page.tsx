@@ -15,6 +15,7 @@ import DeckBuilder from '@/components/deckbuilder/DeckBuilder';
 import Shop from '@/components/shop/Shop';
 import CraftingPanel from '@/components/crafting/CraftingPanel';
 import ZoneSelectScreen from '@/components/zone/ZoneSelectScreen';
+import ZoneVictoryScreen from '@/components/zone/ZoneVictoryScreen';
 import TutorialOverlay from '@/components/ui/TutorialOverlay';
 import DistrictVictory from '@/components/ui/DistrictVictory';
 import SettingsModal from '@/components/ui/SettingsModal';
@@ -74,7 +75,7 @@ export default function GamePage() {
   const router = useRouter();
   const {
     gameState, activeZone, setScene, saveGame, markTutorialSeen,
-    enterZone, exitZone, collectShard, forgeGridKey,
+    enterZone, exitZone, collectShard, forgeGridKey, defeatZoneBoss,
     markZoneEnemyDefeated, markZoneCacheLooted, addCredits,
   } = useGameStore();
   const { setCollection, setDeck } = useDeckStore();
@@ -90,6 +91,9 @@ export default function GamePage() {
   // Zone battle context
   const [zoneBattleKey, setZoneBattleKey]           = useState<string | null>(null);
   const [zoneBattleProfile, setZoneBattleProfile]   = useState<EnemyProfile | null>(null);
+  const [isBossBattle, setIsBossBattle]             = useState(false);
+  const [showZoneVictory, setShowZoneVictory]       = useState(false);
+  const [defeatedBossName, setDefeatedBossName]     = useState('');
 
   useEffect(() => {
     if (!gameState) router.replace('/');
@@ -125,10 +129,27 @@ export default function GamePage() {
     const profileId = pendingBattle?.profileId ?? '';
     setLastBattleResult(result);
 
-    // Zone battle — mark enemy defeated and collect shards
+    // Zone boss battle win
+    if (isBossBattle && result === 'win') {
+      const bossName = zoneBattleProfile?.name ?? 'Zone Boss';
+      defeatZoneBoss();
+      setTimeout(() => {
+        setDefeatedBossName(bossName);
+        setShowZoneVictory(true);
+        setScreen('city_hub');
+        setScene('city_hub');
+        setPendingBattle(null);
+        setZoneBattleKey(null);
+        setZoneBattleProfile(null);
+        setIsBossBattle(false);
+        saveGame();
+      }, 300);
+      return;
+    }
+
+    // Zone regular enemy — mark defeated and collect shards
     if (zoneBattleKey && result === 'win') {
       markZoneEnemyDefeated(zoneBattleKey);
-      // 15% chance to drop a shard
       if (Math.random() < 0.15) {
         collectShard(1);
       }
@@ -141,21 +162,23 @@ export default function GamePage() {
         setPendingBattle(null);
         setZoneBattleKey(null);
         setZoneBattleProfile(null);
+        setIsBossBattle(false);
         saveGame();
         setShowDistrictVictory(true);
       }, 300);
     } else {
-      const back = zoneBattleKey ? 'zone_exploration' : 'city_hub';
+      const back = (zoneBattleKey || isBossBattle) ? 'zone_exploration' : 'city_hub';
       setTimeout(() => {
         setScreen(back);
         setScene(back === 'zone_exploration' ? 'zone' : 'city_hub');
         setPendingBattle(null);
         setZoneBattleKey(null);
         setZoneBattleProfile(null);
+        setIsBossBattle(false);
         saveGame();
       }, 300);
     }
-  }, [setScene, saveGame, pendingBattle, zoneBattleKey, markZoneEnemyDefeated, collectShard]);
+  }, [setScene, saveGame, pendingBattle, zoneBattleKey, zoneBattleProfile, isBossBattle, markZoneEnemyDefeated, collectShard, defeatZoneBoss]);
 
   const handleBackToHub = useCallback(() => {
     setScreen('city_hub');
@@ -191,6 +214,16 @@ export default function GamePage() {
     handleBattleStart(`zone_enemy_${enemyKey}`, profile.id);
   }, [handleBattleStart]);
 
+  const handleZoneBossBattle = useCallback(() => {
+    const zone = useGameStore.getState().activeZone;
+    if (!zone) return;
+    const bossSeed = `${zone.config.seed}_boss`;
+    const profile = generateEnemyProfile(bossSeed, zone.config, true);
+    setIsBossBattle(true);
+    setZoneBattleProfile(profile);
+    handleBattleStart('zone_boss', profile.id);
+  }, [handleBattleStart]);
+
   const handleZoneCacheLoot = useCallback((cacheKey: string, _cacheSeed: string) => {
     markZoneCacheLooted(cacheKey);
     // Give shard + some credits
@@ -218,6 +251,11 @@ export default function GamePage() {
   const handleDistrictVictoryContinue = useCallback(() => {
     setShowDistrictVictory(false);
   }, []);
+
+  const handleZoneVictoryContinue = useCallback(() => {
+    setShowZoneVictory(false);
+    exitZone();
+  }, [exitZone]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -257,6 +295,7 @@ export default function GamePage() {
             zoneState={activeZone}
             onEnemyBattle={handleZoneEnemyBattle}
             onCacheLoot={handleZoneCacheLoot}
+            onBossBattle={handleZoneBossBattle}
             onExit={handleExitZone}
             onForgeKey={handleForgeKey}
             isActive={screen === 'zone_exploration'}
@@ -314,6 +353,15 @@ export default function GamePage() {
       {/* Tutorial overlay */}
       {showTutorial && (
         <TutorialOverlay onDone={handleTutorialDone} />
+      )}
+
+      {/* Zone victory screen */}
+      {showZoneVictory && activeZone && (
+        <ZoneVictoryScreen
+          zoneLevel={activeZone.config.level}
+          bossName={defeatedBossName}
+          onContinue={handleZoneVictoryContinue}
+        />
       )}
 
       {/* District victory screen */}
