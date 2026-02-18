@@ -166,27 +166,30 @@ function CardLayout({
         </span>
       </div>
 
-      {/* ── Text area (dark zone in frame) — description or mods */}
+      {/* ── Text area (dark zone in frame) — mods if present, else description */}
       <div style={{
         position: 'absolute', zIndex: 3,
         top: textTop, height: textH,
-        left: w * 0.06, right: w * 0.06,
+        left: w * 0.05, right: w * 0.05,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
         overflow: 'hidden',
         paddingTop: 2,
       }}>
-        {showMods && cardMods && modSlots > 0 ? (
+        {cardMods && modSlots > 0 ? (
           <>
-            <div style={{
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: Math.max(fontSize - 2, 6),
-              color: rarityBorderColor ?? ec.primary,
-              letterSpacing: '0.08em',
-              marginBottom: 2,
-              fontWeight: 700,
-            }}>
-              {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
-            </div>
+            {/* Rarity label — only in hover (showMods), not on card itself */}
+            {showMods && (
+              <div style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: Math.max(fontSize - 2, 6),
+                color: rarityBorderColor ?? ec.primary,
+                letterSpacing: '0.08em',
+                marginBottom: 2,
+                fontWeight: 700,
+              }}>
+                {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
+              </div>
+            )}
             {cardMods.mods.map((applied, i) => {
               const mod = MOD_MAP[applied.modId];
               if (!mod) return null;
@@ -195,14 +198,43 @@ function CardLayout({
               const isPrefix = mod.type === 'prefix';
               const isBad = effect.isNegative || effect.isUseless;
               const nameColor = isBad ? '#666677' : isPrefix ? '#00f0ff' : '#c850ff';
-              const descColor = isBad ? '#555566' : '#8888aa';
+              const descColor = isBad ? '#555566' : '#aaaacc';
               return (
-                <div key={i} style={{ marginBottom: 1 }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: isBad ? '#555' : TIER_COLOR[tier], fontWeight: 700, marginRight: 3 }}>
+                <div key={i} style={{ marginBottom: showMods ? 2 : 1, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 2 }}>
+                  <span style={{
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: Math.max(fontSize - 2, 5.5),
+                    color: isBad ? '#555' : TIER_COLOR[tier],
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}>
                     {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
                   </span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: nameColor }}>{mod.name}</span>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 3, 5.5), color: descColor, marginLeft: 6 }}>{effect.description}</div>
+                  <span style={{
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: Math.max(fontSize - 2, 5.5),
+                    color: nameColor,
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                  }}>
+                    {mod.name}
+                  </span>
+                  {/* Description only in hover preview */}
+                  {showMods && (
+                    <div style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: Math.max(fontSize - 3, 5.5),
+                      color: descColor,
+                      width: '100%',
+                      paddingLeft: 6,
+                      lineHeight: 1.3,
+                    }}>
+                      {effect.description}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -216,7 +248,7 @@ function CardLayout({
             margin: 0,
             overflow: 'hidden',
             display: '-webkit-box',
-            WebkitLineClamp: showMods ? 3 : 2,
+            WebkitLineClamp: 3,
             WebkitBoxOrient: 'vertical',
           }}>
             {card.description}
