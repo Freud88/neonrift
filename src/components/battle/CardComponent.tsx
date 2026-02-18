@@ -124,7 +124,7 @@ function CardFrame({
           whiteSpace: 'nowrap',
           lineHeight: 1.1,
         }}>
-          {card.name}
+          {card.mods?.displayName ?? card.name}
         </span>
       </div>
 
@@ -431,7 +431,7 @@ export default function CardComponent({
           padding: '0 2px',
         }}>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 5.5, color: accentColor, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {card.name}
+            {card.mods?.displayName ?? card.name}
           </span>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useGameStore } from '@/stores/gameStore';
 import { CRAFTING_ITEMS } from '@/data/craftingItems';
 import { MODS, MOD_MAP } from '@/data/mods';
 import { rarityFromModCount, pickSingleMod } from '@/utils/cardMods';
+import { generateCardName } from '@/utils/nameGenerator';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
 import { MAX_TIER } from '@/utils/tierUtils';
@@ -192,13 +193,36 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
         msg = 'Unknown item';
     }
 
-    // Update card in collection by index (only this specific card)
+    // Regenerate uniqueId and displayName whenever mods change
+    if (newCard.mods && newCard.mods.mods.length > 0) {
+      const modKey = newCard.mods.mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_');
+      newCard = {
+        ...newCard,
+        uniqueId: `${newCard.id}__${modKey}`,
+        mods: {
+          ...newCard.mods,
+          displayName: generateCardName(newCard, newCard.mods.mods),
+        },
+      };
+    } else if (!newCard.mods) {
+      newCard = { ...newCard, uniqueId: undefined };
+    }
+
+    // Update card in collection and sync matching deck copy
     useGameStore.setState((s) => {
       if (!s.gameState || selectedIndex < 0) return s;
       const coll = [...s.gameState.collection];
       coll[selectedIndex] = newCard;
+      // Also update the first matching deck copy (same base id + old uniqueId)
+      const oldUniqueId = selectedCard?.uniqueId;
+      const oldId = selectedCard?.id;
+      const deck = [...s.gameState.deck];
+      const deckIdx = deck.findIndex(
+        (c) => c.id === oldId && (c.uniqueId ?? undefined) === (oldUniqueId ?? undefined)
+      );
+      if (deckIdx >= 0) deck[deckIdx] = newCard;
       return {
-        gameState: { ...s.gameState, collection: coll },
+        gameState: { ...s.gameState, collection: coll, deck },
       };
     });
     useGameStore.getState().saveGame();
