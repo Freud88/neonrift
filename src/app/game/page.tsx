@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { useDeckStore } from '@/stores/deckStore';
 import { CITY_HUB_MAP } from '@/data/cityHubMap';
+import { generateEnemyProfile } from '@/engine/EnemyGenerator';
+import type { EnemyProfile } from '@/types/enemy';
 import ExplorationView from '@/components/exploration/ExplorationView';
 import ZoneExplorationView from '@/components/zone/ZoneExplorationView';
 import BattleArena from '@/components/battle/BattleArena';
@@ -87,6 +89,7 @@ export default function GamePage() {
   const [lastBattleResult, setLastBattleResult]     = useState<'win' | 'lose' | null>(null);
   // Zone battle context
   const [zoneBattleKey, setZoneBattleKey]           = useState<string | null>(null);
+  const [zoneBattleProfile, setZoneBattleProfile]   = useState<EnemyProfile | null>(null);
 
   useEffect(() => {
     if (!gameState) router.replace('/');
@@ -137,6 +140,7 @@ export default function GamePage() {
         setScene('city_hub');
         setPendingBattle(null);
         setZoneBattleKey(null);
+        setZoneBattleProfile(null);
         saveGame();
         setShowDistrictVictory(true);
       }, 300);
@@ -147,6 +151,7 @@ export default function GamePage() {
         setScene(back === 'zone_exploration' ? 'zone' : 'city_hub');
         setPendingBattle(null);
         setZoneBattleKey(null);
+        setZoneBattleProfile(null);
         saveGame();
       }, 300);
     }
@@ -178,9 +183,12 @@ export default function GamePage() {
   }, [exitZone, setScene]);
 
   const handleZoneEnemyBattle = useCallback((enemyKey: string, profileSeed: string) => {
+    const zone = useGameStore.getState().activeZone;
+    if (!zone) return;
     setZoneBattleKey(enemyKey);
-    // Use profileSeed as the profileId for now; FASE 4 will generate proper enemy profiles
-    handleBattleStart(`zone_enemy_${enemyKey}`, profileSeed);
+    const profile = generateEnemyProfile(profileSeed, zone.config, false);
+    setZoneBattleProfile(profile);
+    handleBattleStart(`zone_enemy_${enemyKey}`, profile.id);
   }, [handleBattleStart]);
 
   const handleZoneCacheLoot = useCallback((cacheKey: string, _cacheSeed: string) => {
@@ -273,6 +281,7 @@ export default function GamePage() {
           <BattleArena
             enemyId={pendingBattle.enemyId}
             enemyProfileId={pendingBattle.profileId}
+            enemyProfile={zoneBattleProfile ?? undefined}
             onBattleEnd={handleBattleEnd}
           />
         </div>

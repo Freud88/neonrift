@@ -18,10 +18,11 @@ import DamageNumberLayer, { type DamageEvent } from './DamageNumber';
 interface BattleArenaProps {
   enemyId: string;           // map instance ID (for marking defeated)
   enemyProfileId: string;
+  enemyProfile?: import('@/types/enemy').EnemyProfile;  // optional override for procedural enemies
   onBattleEnd: (result: 'win' | 'lose') => void;
 }
 
-export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: BattleArenaProps) {
+export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: overrideProfile, onBattleEnd }: BattleArenaProps) {
   const {
     battleState,
     selectedCardId,
@@ -51,13 +52,13 @@ export default function BattleArena({ enemyId, enemyProfileId, onBattleEnd }: Ba
   const prevPlayerHp = useRef<number | null>(null);
   const prevEnemyHp  = useRef<number | null>(null);
 
-  const profile = ENEMIES[enemyProfileId];
+  const profile = overrideProfile ?? ENEMIES[enemyProfileId];
 
   // ── Initialize ──────────────────────────────────────────────────────────────
   const { startBattle } = useBattleStore();
   useEffect(() => {
     if (!gameState) return;
-    startBattle(gameState.deck, enemyProfileId);
+    startBattle(gameState.deck, enemyProfileId, overrideProfile);
     return () => clearBattle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

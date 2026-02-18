@@ -5,6 +5,7 @@ import { BattleEngine, type BattleState, type AttackEvent } from '@/engine/Battl
 import { AIEngine } from '@/engine/AIEngine';
 import { ENEMIES } from '@/data/enemies';
 import { CARD_MAP } from '@/data/cards';
+import type { EnemyProfile } from '@/types/enemy';
 import type { Card, CardInPlay } from '@/types/card';
 import type { AIType } from '@/types/enemy';
 
@@ -29,7 +30,7 @@ interface BattleStoreState {
   pendingEnemyCard: CardInPlay | null;   // card enemy just played — waiting for player ack
 
   // Actions
-  startBattle: (playerDeck: Card[], enemyProfileId: string) => void;
+  startBattle: (playerDeck: Card[], enemyProfileId: string, overrideProfile?: EnemyProfile) => void;
   doMulligan: () => void;
   acceptHand: () => void;
   selectCard: (instanceId: string | null) => void;
@@ -61,8 +62,8 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
   isAnimating: false,
   pendingEnemyCard: null,
 
-  startBattle: (playerDeck, enemyProfileId) => {
-    const profile = ENEMIES[enemyProfileId];
+  startBattle: (playerDeck, enemyProfileId, overrideProfile) => {
+    const profile = overrideProfile ?? ENEMIES[enemyProfileId];
     if (!profile) return;
 
     const enemyCards = profile.deck
