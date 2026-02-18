@@ -121,7 +121,7 @@ function buildDisplayName(card: Card, mods: AppliedMod[]): string {
 
 // ── Apply mods to base stats ──────────────────────────────────────────────────
 
-function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
+export function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
   let atkBonus = 0;
   let defBonus = 0;
   let costReduction = 0;

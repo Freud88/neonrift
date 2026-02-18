@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CRAFTING_ITEMS } from '@/data/craftingItems';
 import { MODS, MOD_MAP } from '@/data/mods';
-import { rarityFromModCount, pickSingleMod } from '@/utils/cardMods';
+import { rarityFromModCount, pickSingleMod, applyModStats } from '@/utils/cardMods';
 import { generateCardName } from '@/utils/nameGenerator';
+import { CARD_MAP } from '@/data/cards';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
 import { MAX_TIER } from '@/utils/tierUtils';
@@ -193,19 +194,25 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
         msg = 'Unknown item';
     }
 
-    // Regenerate uniqueId and displayName whenever mods change
+    // Regenerate uniqueId, displayName and bake stats from base card whenever mods change
+    const baseCard = CARD_MAP[newCard.id] ?? newCard;
     if (newCard.mods && newCard.mods.mods.length > 0) {
-      const modKey = newCard.mods.mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_');
+      const currentMods = newCard.mods.mods;
+      const modKey = currentMods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_');
+      const statOverrides = applyModStats(baseCard, currentMods);
       newCard = {
-        ...newCard,
+        ...baseCard,
+        ...statOverrides,
         uniqueId: `${newCard.id}__${modKey}`,
+        artIndex: newCard.artIndex,
         mods: {
           ...newCard.mods,
-          displayName: generateCardName(newCard, newCard.mods.mods),
+          displayName: generateCardName(baseCard, currentMods),
         },
       };
     } else if (!newCard.mods) {
-      newCard = { ...newCard, uniqueId: undefined };
+      // Stripped all mods — restore full base stats
+      newCard = { ...baseCard, artIndex: newCard.artIndex, uniqueId: undefined };
     }
 
     // Update card in collection and sync matching deck copy
