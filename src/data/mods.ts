@@ -993,6 +993,32 @@ export const MODS: Mod[] = [
       special: 'gridoverride', specialValue: v,
     })),
   },
+  // ── Graveyard Mods ───────────────────────────────────────────────────────────
+  {
+    id: 'S53', name: 'of Recall', type: 'suffix', applicableTo: ['agent'], weight: 12,
+    tiers: build(nt(3, 1), v => ({
+      description: `When destroyed: returns to hand after ${v} turn${v !== 1 ? 's' : ''}`,
+      special: 'recall_death', specialValue: v,
+    })),
+  },
+  {
+    id: 'S54', name: 'of Haunting', type: 'suffix', applicableTo: ['agent'], weight: 10,
+    tiers: build(nt(1, 3), v => ({
+      description: `While in graveyard: all allies gain +${v} ATK`,
+      special: 'haunt', specialValue: v,
+    })),
+  },
+  {
+    id: 'S55', name: 'of Scavenging', type: 'suffix', applicableTo: ['agent'], weight: 14,
+    tiers: allSame({ description: 'When destroyed: draw 1 card', special: 'scavenge', specialValue: 1 }),
+  },
+  {
+    id: 'P45', name: 'Undying', type: 'prefix', applicableTo: ['agent'], weight: 8,
+    tiers: build(pt(10, 50), v => ({
+      description: `${v}% chance to revive with 1 DEF when destroyed`,
+      special: 'undying', specialValue: v,
+    })),
+  },
 ];
 
 // ── Quick lookup by id ─────────────────────────────────────────────────────────

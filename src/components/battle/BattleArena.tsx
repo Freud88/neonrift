@@ -15,6 +15,7 @@ import HandComponent from './HandComponent';
 import MulliganScreen from './MulliganScreen';
 import BattleRewards from './BattleRewards';
 import DamageNumberLayer, { type DamageEvent } from './DamageNumber';
+import GraveyardPanel from './GraveyardPanel';
 
 interface BattleArenaProps {
   enemyId: string;           // map instance ID (for marking defeated)
@@ -55,6 +56,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
   const [shake, setShake]                   = useState(false);
   const [showLog, setShowLog]               = useState(false);
+  const [showGraveyard, setShowGraveyard]   = useState(false);
   const [decayToasts, setDecayToasts]       = useState<{ id: string; msg: string }[]>([]);
   const prevPlayerHp = useRef<number | null>(null);
   const prevEnemyHp  = useRef<number | null>(null);
@@ -551,6 +553,39 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
       >
         {showLog ? '✕ LOG' : '📋 LOG'}
       </button>
+
+      {/* Graveyard toggle button */}
+      <button
+        onClick={() => setShowGraveyard(true)}
+        style={{
+          position: 'absolute',
+          bottom: 58,
+          right: 66,
+          zIndex: 30,
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 9,
+          letterSpacing: '0.12em',
+          background: 'rgba(10,10,30,0.85)',
+          border: '1px solid #223344',
+          color: '#445566',
+          padding: '4px 8px',
+          cursor: 'pointer',
+          borderRadius: 2,
+        }}
+      >
+        ⚰ {(battleState?.player.discard.length ?? 0) + (battleState?.enemy.discard.length ?? 0)}
+      </button>
+
+      {/* Graveyard panel */}
+      <AnimatePresence>
+        {showGraveyard && battleState && (
+          <GraveyardPanel
+            playerDiscard={battleState.player.discard}
+            enemyDiscard={battleState.enemy.discard}
+            onClose={() => setShowGraveyard(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Combat log panel */}
       <AnimatePresence>

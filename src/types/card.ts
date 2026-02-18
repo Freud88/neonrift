@@ -21,7 +21,7 @@ export interface CardMods {
 }
 
 export interface CardEffect {
-  type: 'damage' | 'heal' | 'draw' | 'buff' | 'debuff' | 'bounce' | 'counter' | 'reveal' | 'summon';
+  type: 'damage' | 'heal' | 'draw' | 'buff' | 'debuff' | 'bounce' | 'counter' | 'reveal' | 'summon' | 'recall' | 'resurrect' | 'recycle';
   value?: number;
   target?: 'any' | 'enemy_agent' | 'all_enemy_agents' | 'player' | 'enemy_player' | 'self' | 'all_agents';
   description: string;

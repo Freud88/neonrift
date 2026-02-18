@@ -833,6 +833,38 @@ export class BattleEngine {
           t.currentDefense += effect.value ?? 0;
         }
       }
+    } else if (effect.type === 'recall') {
+      // Return N cards from discard to hand
+      const count = effect.value ?? 1;
+      for (let i = 0; i < count && owner.discard.length > 0; i++) {
+        const card = owner.discard.pop()!;
+        owner.hand.push(makeInstance(card));
+        this._log(`${inPlay.card.name}: ${card.name} recovered from graveyard!`);
+      }
+    } else if (effect.type === 'recycle') {
+      // Shuffle all discard into deck
+      const count = owner.discard.length;
+      if (count > 0) {
+        owner.deck.push(...owner.discard);
+        owner.discard = [];
+        owner.deck = shuffle(owner.deck);
+        this._log(`${inPlay.card.name}: ${count} cards recycled into deck!`);
+      }
+    } else if (effect.type === 'resurrect') {
+      // Return 1 agent from discard to field at half DEF
+      const agentIdx = [...owner.discard].reverse().findIndex((c) => c.type === 'agent');
+      if (agentIdx !== -1) {
+        const realIdx = owner.discard.length - 1 - agentIdx;
+        const card = owner.discard.splice(realIdx, 1)[0];
+        const halfDef = Math.max(1, Math.ceil((card.defense ?? 1) * (effect.value ?? 50) / 100));
+        const risen = makeInstance(card);
+        risen.currentDefense = halfDef;
+        risen.summonedThisTurn = true;
+        owner.field.push(risen);
+        this._log(`${inPlay.card.name}: ${card.name} rises from the graveyard! (${risen.currentAttack}/${halfDef})`);
+      } else {
+        this._log(`${inPlay.card.name}: no agents in graveyard.`);
+      }
     }
   }
 
@@ -1417,6 +1449,62 @@ export class BattleEngine {
             this._log(`${hcard.card.name} discarded by Feedback Loop!`);
           }
         }
+
+        // Scavenge mod: draw 1 card on death
+        const scavengeVal = getSpecialValue(target, 'scavenge');
+        if (scavengeVal > 0) {
+          this._drawCards(owner, scavengeVal);
+          this._log(`${target.card.name} scavenges: draw ${scavengeVal}!`);
+        }
+
+        // Undying mod: % chance to revive with 1 DEF
+        const undyingChance = getSpecialValue(target, 'undying');
+        if (undyingChance > 0 && Math.random() * 100 < undyingChance) {
+          const risen = makeInstance(target.card);
+          risen.currentDefense = 1;
+          risen.summonedThisTurn = true;
+          owner.field.push(risen);
+          // Remove from discard
+          const di2 = owner.discard.indexOf(target.card);
+          if (di2 !== -1) owner.discard.splice(di2, 1);
+          this._log(`${target.card.name} refuses to die! (Undying)`);
+        }
+
+        // Memory Fragment: passive malware — draw 1 when ally agent dies
+        for (const m of owner.field) {
+          if (m.card.id === 'synth_memory_fragment' && m !== target) {
+            this._drawCards(owner, 1);
+            this._log(`Memory Fragment: draw 1 (${target.card.name} died)`);
+          }
+        }
+
+        // Deadman's Switch: trap — deal dead agent's ATK to random enemy
+        for (let ti = owner.traps.length - 1; ti >= 0; ti--) {
+          if (owner.traps[ti].card.id === 'rust_deadman_switch') {
+            const trapCard = owner.traps[ti].card;
+            const opp2 = owner === this.state.player ? this.state.enemy : this.state.player;
+            const deadAtk = target.card.attack ?? 0;
+            if (deadAtk > 0) {
+              const targets2 = opp2.field.filter((c) => c.currentDefense > 0);
+              if (targets2.length > 0) {
+                const t2 = targets2[Math.floor(Math.random() * targets2.length)];
+                this._dealDamageToAgent(t2, opp2, deadAtk);
+                this._log(`Deadman's Switch: ${t2.card.name} takes ${deadAtk} damage!`);
+              } else {
+                opp2.health = Math.max(0, opp2.health - deadAtk);
+                this._log(`Deadman's Switch: ${deadAtk} damage to player!`);
+              }
+            }
+            // Consume the trap
+            owner.traps.splice(ti, 1);
+            owner.discard.push(trapCard);
+            break;
+          }
+        }
+
+        // Haunt mod: while in graveyard, boost all allies' ATK
+        // (Applied as a passive check — recalc after any death adds to discard)
+        this._recalcHauntBuff(owner);
       }
     } else if (attacker && attackerOwner) {
       // Drain on combat hit (target survived) — heal % of damage dealt
@@ -1617,6 +1705,32 @@ export class BattleEngine {
       this.state.result = 'lose';
       this.state.phase  = 'battle_end';
       this._log('Player LOSES!');
+    }
+  }
+
+  /** Recalculate the Haunt buff: cards with 'haunt' mod in discard boost all allies' ATK. */
+  private _recalcHauntBuff(combatant: CombatantState) {
+    // Sum haunt bonuses from discard
+    let totalHaunt = 0;
+    for (const card of combatant.discard) {
+      for (const applied of card.mods?.mods ?? []) {
+        const mod = MOD_MAP[applied.modId];
+        const eff = mod?.tiers[applied.tier];
+        if (eff?.special === 'haunt') totalHaunt += eff.specialValue ?? 0;
+      }
+    }
+    // Apply/remove haunt buffs from all field agents
+    for (const agent of combatant.field) {
+      // Remove old haunt buff
+      const oldHauntIdx = agent.buffs.findIndex((b) => b.source === '__haunt');
+      const oldHauntAtk = oldHauntIdx !== -1 ? agent.buffs[oldHauntIdx].attack : 0;
+      if (oldHauntIdx !== -1) agent.buffs.splice(oldHauntIdx, 1);
+      agent.currentAttack -= oldHauntAtk;
+      // Apply new haunt buff
+      if (totalHaunt > 0) {
+        agent.currentAttack += totalHaunt;
+        agent.buffs.push({ attack: totalHaunt, defense: 0, source: '__haunt' });
+      }
     }
   }
 
