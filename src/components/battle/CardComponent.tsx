@@ -377,7 +377,6 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
           borderRadius: 6,
           overflow: 'hidden',
           boxShadow: `0 0 0 2px ${accentColor}, 0 0 40px ${accentColor}88, 0 0 80px rgba(0,0,0,0.85)`,
-          position: 'relative',
         }}
       >
         <CardFrame
