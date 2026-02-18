@@ -1,15 +1,21 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CARDS } from '@/data/cards';
 import { shuffle } from '@/engine/BattleEngine';
 import { generateModdedCard } from '@/utils/cardMods';
+import { CRAFTING_ITEMS, CRAFTING_ITEMS_LIST } from '@/data/craftingItems';
 import type { Card } from '@/types/card';
+import type { CraftingItemId } from '@/types/game';
 import { ENERGY_COLORS } from '@/utils/energyColors';
 import CardComponent from '@/components/battle/CardComponent';
 import NeonButton from '@/components/ui/NeonButton';
+import { MODS, MOD_MAP } from '@/data/mods';
+import { rarityFromModCount } from '@/utils/cardMods';
+
+void ENERGY_COLORS;
 
 const DEALER_LINES = [
   "Looking for some fresh code, Drifter?",
@@ -31,31 +37,47 @@ function sellPrice(card: Card): number {
 const PACK_PRICE = 0;
 const PACK_SIZE  = 3;
 
+function buildInventory() {
+  const pool = shuffle([...CARDS]);
+  // Testing: force high mod counts so we see 5–6 mod cards
+  return pool.slice(0, 6).map((c) => {
+    const r = Math.random();
+    const modCount = r < 0.20 ? 6 : r < 0.45 ? 5 : r < 0.70 ? 4 : r < 0.88 ? 3 : 2;
+    return generateModdedCard(c, modCount);
+  });
+}
+
 interface ShopProps {
   onClose: () => void;
 }
 
-export default function Shop({ onClose }: ShopProps) {
-  const { gameState, spendCredits, addToCollection } = useGameStore();
-  const credits = gameState?.player.credits ?? 0;
-  const collection = gameState?.collection ?? [];
-  const deck = gameState?.deck ?? [];
+// Helper: convert hex color to "r,g,b" for rgba()
+function hexToRgb(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `${r},${g},${b}`;
+}
 
-  const [tab, setTab] = useState<'buy' | 'sell'>('buy');
+export default function Shop({ onClose }: ShopProps) {
+  const { gameState, spendCredits, addToCollection, addCraftingItem, removeCraftingItem } = useGameStore();
+  const credits    = gameState?.player.credits ?? 0;
+  const collection = gameState?.collection ?? [];
+  const deck       = gameState?.deck ?? [];
+
+  const [tab, setTab] = useState<'buy' | 'sell' | 'items'>('buy');
   const [dealerLine] = useState(() => DEALER_LINES[Math.floor(Math.random() * DEALER_LINES.length)]);
-  const [buyFlash, setBuyFlash] = useState<string | null>(null);
+  const [buyFlash, setBuyFlash]   = useState<string | null>(null);
   const [sellFlash, setSellFlash] = useState<string | null>(null);
   const [packOpenCards, setPackOpenCards] = useState<Card[] | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Shop inventory: 6 random cards with mods (stable per session)
-  const inventory = useMemo(() => {
-    const pool = shuffle([...CARDS]);
-    return pool.slice(0, 6).map((c) => {
-      const r = Math.random();
-      const modCount = r < 0.03 ? 4 : r < 0.12 ? 3 : r < 0.35 ? 2 : 1;
-      return generateModdedCard(c, modCount);
-    });
-  }, []);
+  // Shop inventory: refreshes when refreshKey changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const inventory = useMemo(() => buildInventory(), [refreshKey]);
+
+  const handleRefresh = () => setRefreshKey((k) => k + 1);
 
   const handleBuy = (card: Card) => {
     const price = cardPrice(card);
@@ -64,7 +86,7 @@ export default function Shop({ onClose }: ShopProps) {
     if (ok) {
       addToCollection(card);
       useGameStore.getState().saveGame();
-      setBuyFlash(card.id);
+      setBuyFlash(card.uniqueId ?? card.id);
       setTimeout(() => setBuyFlash(null), 1200);
     }
   };
@@ -73,10 +95,9 @@ export default function Shop({ onClose }: ShopProps) {
     if (PACK_PRICE > 0 && credits < PACK_PRICE) return;
     const ok = PACK_PRICE === 0 ? true : spendCredits(PACK_PRICE);
     if (ok) {
-      // Each pack card gets 1-2 random mods (dealer-quality goods)
       const pack = shuffle([...CARDS]).slice(0, PACK_SIZE).map((c) => {
         const r = Math.random();
-        const modCount = r < 0.05 ? 4 : r < 0.18 ? 3 : r < 0.45 ? 2 : 1;
+        const modCount = r < 0.15 ? 6 : r < 0.35 ? 5 : r < 0.60 ? 4 : r < 0.80 ? 3 : 2;
         return generateModdedCard(c, modCount);
       });
       for (const c of pack) addToCollection(c);
@@ -86,11 +107,9 @@ export default function Shop({ onClose }: ShopProps) {
   };
 
   const handleSell = (card: Card, index: number) => {
-    // Can't sell if card is the only copy in deck
     const inDeck = deck.filter((c) => c.id === card.id).length;
     const owned  = collection.filter((c) => c.id === card.id).length;
-    if (owned <= inDeck) return; // would break deck
-    // Remove one copy from collection
+    if (owned <= inDeck) return;
     useGameStore.setState((s) => {
       if (!s.gameState) return s;
       const coll = [...s.gameState.collection];
@@ -104,7 +123,12 @@ export default function Shop({ onClose }: ShopProps) {
     void index;
   };
 
-  // Unique collection cards for sell tab
+  // Give item for free (testing)
+  const handleGetItem = (itemId: CraftingItemId) => {
+    addCraftingItem(itemId);
+    useGameStore.getState().saveGame();
+  };
+
   const uniqueCollection = useMemo(() => {
     const seen = new Set<string>();
     return collection.filter((c) => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
@@ -138,11 +162,8 @@ export default function Shop({ onClose }: ShopProps) {
       </div>
 
       {/* Tabs */}
-      <div style={{
-        display: 'flex', borderBottom: '1px solid rgba(200,80,255,0.2)',
-        flexShrink: 0,
-      }}>
-        {(['buy', 'sell'] as const).map((t) => (
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(200,80,255,0.2)', flexShrink: 0 }}>
+        {(['buy', 'sell', 'items'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -157,7 +178,7 @@ export default function Shop({ onClose }: ShopProps) {
               borderBottom: tab === t ? '2px solid #c850ff' : '2px solid transparent',
             }}
           >
-            {t}
+            {t === 'items' ? '⚗ ITEMS' : t}
           </button>
         ))}
       </div>
@@ -165,6 +186,7 @@ export default function Shop({ onClose }: ShopProps) {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
 
+        {/* ── BUY TAB ── */}
         {tab === 'buy' && (
           <>
             {/* Pack */}
@@ -197,26 +219,39 @@ export default function Shop({ onClose }: ShopProps) {
               </NeonButton>
             </motion.div>
 
-            {/* Individual cards */}
-            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', marginBottom: 10, letterSpacing: '0.1em' }}>
-              SINGLES — inventory refreshes each visit
-            </p>
+            {/* Singles header + refresh */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', letterSpacing: '0.1em' }}>
+                SINGLES — inventory refreshes each visit
+              </p>
+              <button
+                onClick={handleRefresh}
+                style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+                  color: '#00f0ff', background: 'transparent',
+                  border: '1px solid #00f0ff44', borderRadius: 3,
+                  padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.1em',
+                }}
+              >
+                ⟳ REFRESH
+              </button>
+            </div>
+
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {inventory.map((card) => {
-                const price  = cardPrice(card);
-                const canBuy = credits >= price;
-                const justBought = buyFlash === card.id;
+                const price    = cardPrice(card);
+                const canBuy   = credits >= price;
+                const flashKey = card.uniqueId ?? card.id;
+                const justBought = buyFlash === flashKey;
                 return (
-                  <div key={card.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div key={flashKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <div style={{ position: 'relative' }}>
                       <CardComponent card={card} size="hand" disabled={!canBuy} />
-                      {/* Shimmer overlay */}
                       <motion.div
                         style={{
                           position: 'absolute', inset: 0,
                           background: 'linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.08) 50%, transparent 70%)',
-                          pointerEvents: 'none',
-                          borderRadius: 4,
+                          pointerEvents: 'none', borderRadius: 4,
                         }}
                         animate={{ backgroundPosition: ['200% 0', '-200% 0'] }}
                         transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
@@ -247,6 +282,7 @@ export default function Shop({ onClose }: ShopProps) {
           </>
         )}
 
+        {/* ── SELL TAB ── */}
         {tab === 'sell' && (
           <>
             <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', marginBottom: 12, letterSpacing: '0.1em' }}>
@@ -254,11 +290,11 @@ export default function Shop({ onClose }: ShopProps) {
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {uniqueCollection.map((card, i) => {
-                const price    = sellPrice(card);
-                const inDeck   = deck.filter((c) => c.id === card.id).length;
-                const owned    = collection.filter((c) => c.id === card.id).length;
-                const canSell  = owned > inDeck;
-                const flashed  = sellFlash === card.id + i;
+                const price   = sellPrice(card);
+                const inDeck  = deck.filter((c) => c.id === card.id).length;
+                const owned   = collection.filter((c) => c.id === card.id).length;
+                const canSell = owned > inDeck;
+                const flashed = sellFlash === card.id + i;
                 return (
                   <div key={card.id + i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <div style={{ position: 'relative' }}>
@@ -298,6 +334,17 @@ export default function Shop({ onClose }: ShopProps) {
             </div>
           </>
         )}
+
+        {/* ── ITEMS TAB ── */}
+        {tab === 'items' && (
+          <ItemsTab
+            inventory={gameState?.inventory ?? []}
+            collection={collection}
+            onGetItem={handleGetItem}
+            removeCraftingItem={removeCraftingItem}
+          />
+        )}
+
       </div>
 
       {/* Pack open reveal overlay */}
@@ -328,7 +375,7 @@ export default function Shop({ onClose }: ShopProps) {
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
               {packOpenCards.map((card, i) => (
                 <motion.div
-                  key={card.id + i}
+                  key={(card.uniqueId ?? card.id) + i}
                   initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
                   animate={{ scale: 1, opacity: 1, rotateY: 0 }}
                   transition={{ delay: i * 0.25, type: 'spring', stiffness: 200 }}
@@ -350,6 +397,326 @@ export default function Shop({ onClose }: ShopProps) {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Items Tab ─────────────────────────────────────────────────────────────────
+
+interface ItemsTabProps {
+  inventory: { id: CraftingItemId; quantity: number }[];
+  collection: Card[];
+  onGetItem: (id: CraftingItemId) => void;
+  removeCraftingItem: (id: CraftingItemId) => boolean;
+}
+
+function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: ItemsTabProps) {
+  const [selectedItem, setSelectedItem] = useState<CraftingItemId | null>(null);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [result, setResult] = useState<{ msg: string; card?: Card } | null>(null);
+
+  const itemQty = (id: CraftingItemId) =>
+    inventory.find((i) => i.id === id)?.quantity ?? 0;
+
+  const handleApply = useCallback(() => {
+    if (!selectedItem || !selectedCard) return;
+    const consumed = removeCraftingItem(selectedItem);
+    if (!consumed) return;
+
+    let newCard: Card = selectedCard;
+    let msg = '';
+
+    switch (selectedItem) {
+      case 'data_fragment': {
+        // Add exactly 1 new mod to the card (up to max 6)
+        const existing = selectedCard.mods?.mods ?? [];
+        if (existing.length >= 6) {
+          msg = 'Card already has 6 mods (maximum)!';
+          setResult({ msg });
+          return;
+        }
+        // Generate a card with one extra mod and take only the new one
+        const base = { ...selectedCard, mods: undefined };
+        const withExtra = generateModdedCard(base, existing.length + 1);
+        const allNewMods = withExtra.mods?.mods ?? [];
+        // The extra mod is the last one generated
+        const newMod = allNewMods[allNewMods.length - 1];
+        if (!newMod) { msg = 'Failed to generate mod.'; setResult({ msg }); return; }
+        const combinedMods = [...existing, newMod];
+        const modRarity = rarityFromModCount(combinedMods.length);
+        newCard = {
+          ...selectedCard,
+          mods: {
+            mods: combinedMods,
+            modRarity,
+            displayName: selectedCard.mods?.displayName ?? selectedCard.name,
+            locked: selectedCard.mods?.locked ?? [],
+          },
+        };
+        const modName = MOD_MAP[newMod.modId]?.name ?? newMod.modId;
+        msg = `Added mod: ${modName}`;
+        break;
+      }
+      case 'wipe_drive': {
+        // Strip all mods — restore base stats
+        newCard = { ...selectedCard, mods: undefined };
+        msg = `Stripped all mods from ${selectedCard.name}`;
+        break;
+      }
+      case 'recompiler': {
+        const count = selectedCard.mods?.mods.length ?? 1;
+        newCard = generateModdedCard({ ...selectedCard, mods: undefined }, count);
+        msg = `Re-rolled ${count} mod${count > 1 ? 's' : ''} on ${newCard.name}`;
+        break;
+      }
+      case 'tier_boost': {
+        if (!selectedCard.mods || selectedCard.mods.mods.length === 0) {
+          msg = 'No mods to upgrade!';
+          setResult({ msg });
+          return;
+        }
+        const mods = [...selectedCard.mods.mods];
+        // Upgrade the weakest (highest tier number) unlocked mod
+        const locked = selectedCard.mods.locked;
+        const idx = mods.reduce((best, m, i) => {
+          if (locked.includes(m.modId)) return best;
+          return mods[i].tier > mods[best].tier ? i : best;
+        }, 0);
+        if (mods[idx].tier === 1) { msg = 'All mods already at T1!'; setResult({ msg }); return; }
+        mods[idx] = { ...mods[idx], tier: (mods[idx].tier - 1) as 1 | 2 | 3 };
+        newCard = { ...selectedCard, mods: { ...selectedCard.mods, mods } };
+        msg = `Upgraded ${MOD_MAP[mods[idx].modId]?.name ?? ''} to Tier ${mods[idx].tier}`;
+        break;
+      }
+      case 'quantum_lock': {
+        if (!selectedCard.mods || selectedCard.mods.mods.length === 0) {
+          msg = 'No mods to lock!';
+          setResult({ msg });
+          return;
+        }
+        const unlocked = selectedCard.mods.mods.filter(
+          (m) => !selectedCard.mods!.locked.includes(m.modId)
+        );
+        if (unlocked.length === 0) { msg = 'All mods are already locked!'; setResult({ msg }); return; }
+        const target = unlocked[Math.floor(Math.random() * unlocked.length)];
+        newCard = {
+          ...selectedCard,
+          mods: { ...selectedCard.mods, locked: [...selectedCard.mods.locked, target.modId] },
+        };
+        msg = `Locked: ${MOD_MAP[target.modId]?.name ?? target.modId}`;
+        break;
+      }
+      case 'architects_key': {
+        const bossMods = MODS.filter((m) => m.isBossMod);
+        const pick = bossMods[Math.floor(Math.random() * bossMods.length)];
+        if (!pick) { msg = 'No boss mods available!'; setResult({ msg }); return; }
+        const existing = selectedCard.mods?.mods ?? [];
+        if (existing.length >= 6) { msg = 'Card already has 6 mods (maximum)!'; setResult({ msg }); return; }
+        const combinedMods = [...existing, { modId: pick.id, tier: 2 as const }];
+        newCard = {
+          ...selectedCard,
+          mods: {
+            mods: combinedMods,
+            modRarity: rarityFromModCount(combinedMods.length),
+            displayName: selectedCard.mods?.displayName ?? selectedCard.name,
+            locked: selectedCard.mods?.locked ?? [],
+          },
+        };
+        msg = `Boss mod "${pick.name}" added!`;
+        break;
+      }
+      default:
+        msg = 'Unknown item';
+    }
+
+    // Update card in both collection and deck
+    useGameStore.setState((s) => {
+      if (!s.gameState) return s;
+      return {
+        gameState: {
+          ...s.gameState,
+          collection: s.gameState.collection.map((c) =>
+            c.id === selectedCard.id ? newCard : c
+          ),
+          deck: s.gameState.deck.map((c) =>
+            c.id === selectedCard.id ? newCard : c
+          ),
+        },
+      };
+    });
+    useGameStore.getState().saveGame();
+    setResult({ msg, card: newCard });
+    setSelectedCard(null);
+    setSelectedItem(null);
+  }, [selectedItem, selectedCard, removeCraftingItem]);
+
+  const reset = () => {
+    setResult(null);
+    setSelectedCard(null);
+    setSelectedItem(null);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Result banner */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            style={{
+              padding: '10px 16px',
+              border: '1px solid #00f0ff',
+              borderRadius: 4,
+              color: '#00f0ff',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 11,
+            }}
+          >
+            <div style={{ marginBottom: result.card ? 10 : 0 }}>{result.msg}</div>
+            {result.card && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+                <CardComponent card={result.card} size="preview" />
+              </div>
+            )}
+            <NeonButton variant="cyan" size="sm" onClick={reset}>CONTINUE</NeonButton>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!result && (
+        <>
+          {/* Available items to grab for free (testing) */}
+          <div>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', letterSpacing: '0.1em', marginBottom: 8 }}>
+              CRAFTING ITEMS — all free for testing
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {CRAFTING_ITEMS_LIST.map((def) => {
+                const qty = itemQty(def.id);
+                return (
+                  <motion.button
+                    key={def.id}
+                    whileHover={{ scale: 1.04 }}
+                    onClick={() => onGetItem(def.id)}
+                    style={{
+                      background: `rgba(${hexToRgb(def.color)},0.12)`,
+                      border: `1px solid ${def.color}88`,
+                      color: def.color,
+                      padding: '7px 12px',
+                      cursor: 'pointer',
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 10,
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      borderRadius: 3,
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>{def.icon}</span>
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700 }}>{def.name}</div>
+                      <div style={{ fontSize: 8, opacity: 0.7 }}>{def.description}</div>
+                    </div>
+                    <span style={{
+                      marginLeft: 4, fontSize: 9, opacity: 0.8,
+                      background: 'rgba(0,0,0,0.4)', borderRadius: 3, padding: '1px 5px',
+                    }}>
+                      ×{qty} → GET FREE
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Apply item to card */}
+          <div>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444466', letterSpacing: '0.1em', marginBottom: 8 }}>
+              APPLY ITEM TO CARD
+            </p>
+
+            {/* Select item from inventory */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              {inventory.length === 0 ? (
+                <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#333355' }}>
+                  No items in inventory — get some above.
+                </p>
+              ) : (
+                inventory.map(({ id, quantity }) => {
+                  const def = CRAFTING_ITEMS[id];
+                  const active = selectedItem === id;
+                  return (
+                    <motion.button
+                      key={id}
+                      whileHover={{ scale: 1.04 }}
+                      onClick={() => { setSelectedItem(active ? null : id); setSelectedCard(null); }}
+                      style={{
+                        background: active ? `rgba(${hexToRgb(def.color)},0.2)` : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${active ? def.color : '#334'}`,
+                        color: active ? def.color : '#8888aa',
+                        padding: '7px 12px',
+                        cursor: 'pointer',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: 10,
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        borderRadius: 3,
+                      }}
+                    >
+                      <span>{def.icon}</span>
+                      <span>{def.name}</span>
+                      <span style={{ opacity: 0.6, fontSize: 9 }}>×{quantity}</span>
+                    </motion.button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Select card */}
+            {selectedItem && (
+              <>
+                <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6666aa', letterSpacing: '0.1em', marginBottom: 8 }}>
+                  SELECT CARD FROM COLLECTION
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
+                  {collection.map((card) => {
+                    const isSelected = selectedCard?.id === card.id;
+                    return (
+                      <motion.div
+                        key={card.id + (card.mods?.displayName ?? '')}
+                        whileHover={{ y: -4 }}
+                        onClick={() => setSelectedCard(isSelected ? null : card)}
+                        style={{
+                          cursor: 'pointer',
+                          outline: isSelected ? '2px solid #00f0ff' : 'none',
+                          outlineOffset: 3,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <CardComponent card={card} size="hand" selected={isSelected} />
+                      </motion.div>
+                    );
+                  })}
+                  {collection.length === 0 && (
+                    <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#333355' }}>
+                      No cards in collection.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Apply button */}
+            {selectedItem && selectedCard && (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <NeonButton variant="cyan" size="lg" onClick={handleApply}>
+                  ⚡ APPLY {CRAFTING_ITEMS[selectedItem].name.toUpperCase()}
+                </NeonButton>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
