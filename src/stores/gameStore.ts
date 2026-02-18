@@ -6,6 +6,7 @@ import type { Card } from '@/types/card';
 import type { ZoneState, ZoneConfig, BiomeId } from '@/types/zone';
 import { STARTER_DECK } from '@/data/cards';
 import { migrateOldTier } from '@/utils/tierUtils';
+import { generateRiftName } from '@/utils/riftNameGenerator';
 
 // ── XP / Level helpers ────────────────────────────────────────────────────────
 /** XP needed to reach level N (cumulative). Level 1 = 0 XP. */
@@ -29,10 +30,13 @@ const BIOME_ORDER: BiomeId[] = [
 function buildZoneConfig(level: number): ZoneConfig {
   // Early levels (1-5) use gentler scaling so the starter deck can survive
   const earlyMult = level <= 5 ? 0.5 + level * 0.1 : 1; // 0.6, 0.7, 0.8, 0.9, 1.0
+  const seed = `zone_${level}_${Date.now().toString(36)}`;
+  const biome = BIOME_ORDER[(level - 1) % BIOME_ORDER.length];
   return {
     level,
-    seed: `zone_${level}_${Date.now().toString(36)}`,
-    biome: BIOME_ORDER[(level - 1) % BIOME_ORDER.length],
+    seed,
+    biome,
+    riftName: generateRiftName(seed, biome),
     shardsRequired: level <= 2 ? 2 : Math.min(15, 3 + Math.floor(level / 3)),
     enemyScaling: {
       atkMultiplier: earlyMult * (1 + (level - 1) * 0.15),

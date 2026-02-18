@@ -21,6 +21,7 @@ export interface ZoneConfig {
   level: number;
   seed: string;
   biome: BiomeId;
+  riftName: string;
   shardsRequired: number;
   enemyScaling: {
     atkMultiplier: number;

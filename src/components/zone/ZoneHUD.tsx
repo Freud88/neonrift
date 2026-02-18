@@ -84,6 +84,11 @@ export default function ZoneHUD({
             {config.biome.replace(/_/g, ' ').toUpperCase()}
           </span>
         </div>
+        {config.riftName && (
+          <div style={{ fontSize: 8, color: '#aaaacc', fontStyle: 'italic', marginTop: -2 }}>
+            &quot;{config.riftName}&quot;
+          </div>
+        )}
 
         {/* HP bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
