@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { CRAFTING_ITEMS } from '@/data/craftingItems';
 import { MODS, MOD_MAP } from '@/data/mods';
-import { generateModdedCard, rarityFromModCount, pickSingleMod } from '@/utils/cardMods';
+import { rarityFromModCount, pickSingleMod } from '@/utils/cardMods';
 import type { Card } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
 import CardComponent from '@/components/battle/CardComponent';
@@ -105,9 +105,14 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
         if (unlockCount === 0) {
           showFlash('All mods are locked — nothing to re-roll!'); return;
         }
-        // Generate fresh mods for the unlocked slots
-        const freshCard = generateModdedCard({ ...selectedCard, mods: undefined }, unlockCount);
-        const freshMods = freshCard.mods?.mods ?? [];
+        // Generate fresh mods one-by-one, excluding locked mod IDs + already-picked
+        const excludeIds = lockedMods.map((m) => m.modId);
+        const freshMods: typeof allMods = [];
+        for (let i = 0; i < unlockCount; i++) {
+          const usedIds = [...excludeIds, ...freshMods.map((m) => m.modId)];
+          const fresh = pickSingleMod(selectedCard, usedIds);
+          if (fresh) freshMods.push(fresh);
+        }
         const combinedMods = [...lockedMods, ...freshMods];
         newCard = {
           ...selectedCard,
@@ -127,14 +132,23 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
         }
         const mods = [...selectedCard.mods.mods];
         const locked = selectedCard.mods.locked;
-        const idx = mods.reduce((best, m, i) => {
-          if (locked.includes(m.modId)) return best;
-          return mods[i].tier > mods[best].tier ? i : best;
-        }, 0);
-        if (mods[idx].tier === 1) { showFlash('All mods already at T1!'); return; }
-        mods[idx] = { ...mods[idx], tier: (mods[idx].tier - 1) as 1 | 2 | 3 };
+        // Find upgradeable mods: not locked AND not already T1
+        const upgradeable = mods
+          .map((m, i) => ({ m, i }))
+          .filter(({ m }) => !locked.includes(m.modId) && m.tier > 1);
+        if (upgradeable.length === 0) {
+          const allLocked = mods.every((m) => locked.includes(m.modId));
+          const allT1 = mods.every((m) => m.tier === 1);
+          if (allLocked) { showFlash('All mods are locked!'); }
+          else if (allT1) { showFlash('All mods already at T1!'); }
+          else { showFlash('All unlocked mods are already T1!'); }
+          return;
+        }
+        // Pick the worst tier (highest number) to upgrade first
+        const best = upgradeable.reduce((a, b) => a.m.tier > b.m.tier ? a : b);
+        mods[best.i] = { ...mods[best.i], tier: (mods[best.i].tier - 1) as 1 | 2 | 3 };
         newCard = { ...selectedCard, mods: { ...selectedCard.mods, mods } };
-        msg = `Upgraded ${MOD_MAP[mods[idx].modId]?.name ?? ''} to T${mods[idx].tier}`;
+        msg = `Upgraded ${MOD_MAP[mods[best.i].modId]?.name ?? ''} to T${mods[best.i].tier}`;
         break;
       }
       case 'quantum_lock': {
