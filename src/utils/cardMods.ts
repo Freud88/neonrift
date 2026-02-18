@@ -125,6 +125,7 @@ export function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
   let atkBonus = 0;
   let defBonus = 0;
   let costReduction = 0;
+  let costIncrease = 0;
   let effectBonus = 0;   // +damage/+heal/+draw from specials like amp_X
   const extraKeywords: { keyword: string; value?: number }[] = [];
   const degradation = card.mods?.tierDegradation ?? {};
@@ -141,6 +142,7 @@ export function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
     atkBonus      += effect.atkBonus      ?? 0;
     defBonus      += effect.defBonus      ?? 0;
     costReduction += effect.costReduction ?? 0;
+    costIncrease  += effect.costIncrease  ?? 0;
 
     // Parse specials that modify effect value (script damage/draw/heal)
     if (effect.special === 'amp') {
@@ -156,7 +158,7 @@ export function applyModStats(card: Card, mods: AppliedMod[]): Partial<Card> {
     }
   }
 
-  const newCost = Math.max(0, card.cost - costReduction);
+  const newCost = Math.max(0, card.cost - costReduction + costIncrease);
   const newAtk  = (card.attack  ?? 0) + atkBonus;
   const newDef  = (card.defense ?? 0) + defBonus;
 
