@@ -131,13 +131,15 @@ export default function Shop({ onClose }: ShopProps) {
   };
 
   const handleSell = (card: Card, index: number) => {
-    const inDeck = deck.filter((c) => c.id === card.id).length;
-    const owned  = collection.filter((c) => c.id === card.id).length;
+    const cardKey = (c: Card) => c.uniqueId ?? c.id;
+    const key = cardKey(card);
+    const inDeck = deck.filter((c) => cardKey(c) === key).length;
+    const owned  = collection.filter((c) => cardKey(c) === key).length;
     if (owned <= inDeck) return;
     useGameStore.setState((s) => {
       if (!s.gameState) return s;
       const coll = [...s.gameState.collection];
-      const idx  = coll.findIndex((c) => c.id === card.id);
+      const idx  = coll.findIndex((c) => cardKey(c) === key);
       if (idx !== -1) coll.splice(idx, 1);
       return { gameState: { ...s.gameState, collection: coll, player: { ...s.gameState.player, credits: s.gameState.player.credits + sellPrice(card) } } };
     });
@@ -155,7 +157,12 @@ export default function Shop({ onClose }: ShopProps) {
 
   const uniqueCollection = useMemo(() => {
     const seen = new Set<string>();
-    return collection.filter((c) => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+    return collection.filter((c) => {
+      const key = c.uniqueId ?? c.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [collection]);
 
   return (

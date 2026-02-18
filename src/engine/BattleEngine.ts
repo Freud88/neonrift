@@ -72,6 +72,7 @@ export function makeInstance(card: Card): CardInPlay {
     stealthTurns: 0,
     summonedThisTurn: true,
     buffs: [],
+    turnsOnField: 0,
   };
 }
 
@@ -327,7 +328,11 @@ export class BattleEngine {
     }
 
     // Mark all as NOT summoned this turn (so they can attack if they have overclock)
-    for (const c of combatant.field) c.summonedThisTurn = false;
+    for (const c of combatant.field) {
+      c.summonedThisTurn = false;
+      // Increment turnsOnField for Overheating etc.
+      if (c.turnsOnField !== undefined) c.turnsOnField++;
+    }
 
     // ── Per-turn mod effects ────────────────────────────────────────────────────
     const isPlayer = combatant === this.state.player;
@@ -405,6 +410,19 @@ export class BattleEngine {
         if (isPlayer && (gain.atk > 0 || gain.def > 0)) {
           const label = unstableVal > 0 ? 'survives' : 'grows';
           this._log(`${c.card.name} ${label}: ${gain.atk > 0 ? `+${gain.atk} ATK ` : ''}${gain.def > 0 ? `+${gain.def} DEF` : ''}`);
+        }
+      }
+
+      // Overheating: +ATK first turn, -ATK from second turn onward
+      const ohVals = getSpecialValues(c, 'overheating');
+      if (ohVals.v1 > 0 && c.turnsOnField !== undefined) {
+        if (c.turnsOnField === 1) {
+          // Second turn: remove first-turn bonus and apply penalty
+          c.currentAttack -= ohVals.v1; // undo bonus
+          if (ohVals.v2 > 0) {
+            c.currentAttack = Math.max(0, c.currentAttack - ohVals.v2);
+          }
+          if (isPlayer) this._log(`${c.card.name} overheats: -${ohVals.v1 + ohVals.v2} ATK`);
         }
       }
     }
@@ -556,6 +574,14 @@ export class BattleEngine {
       inPlay.playedOnTurn = this.state.turnNumber;
 
       combatant.field.push(inPlay);
+
+      // Overheating: first-turn ATK bonus
+      const ohEntry = getSpecialValues(inPlay, 'overheating');
+      if (ohEntry.v1 > 0) {
+        inPlay.currentAttack += ohEntry.v1;
+        this._log(`${inPlay.card.name} enters overheated: +${ohEntry.v1} ATK this turn!`);
+      }
+
       // Augmented mod: bonus defense on entry
       const shieldBonus = getShieldValue(inPlay);
       if (shieldBonus > 0) {
@@ -630,6 +656,29 @@ export class BattleEngine {
     opponent: CombatantState,
     targetId?: string
   ) {
+    // Replicated: summon a copy with reduced stats on entry
+    const replicateVals = getSpecialValues(inPlay, 'replicate');
+    if (replicateVals.v1 > 0) {
+      const copyCard: Card = {
+        ...inPlay.card,
+        mods: undefined,
+        name: `${inPlay.card.name} (Copy)`,
+      };
+      const copy: CardInPlay = {
+        card: copyCard,
+        instanceId: `${inPlay.card.id}_copy_${++_instanceCounter}`,
+        currentAttack: replicateVals.v1,
+        currentDefense: replicateVals.v2,
+        tapped: false,
+        stealthTurns: 0,
+        summonedThisTurn: true,
+        buffs: [],
+        turnsOnField: 0,
+      };
+      _owner.field.push(copy);
+      this._log(`${inPlay.card.name} summons a ${replicateVals.v1}/${replicateVals.v2} copy!`);
+    }
+
     const effect = inPlay.card.effect;
     if (!effect) return;
 
@@ -931,6 +980,26 @@ export class BattleEngine {
     }
 
     this._log(`${attacker.card.name} attacks ${defender.card.name}`);
+
+    // Flux Surge: chance to attack again (agent must still be alive)
+    const fluxChance = getSpecialValue(attacker, 'fluxsurge');
+    if (fluxChance > 0 && attacker.currentDefense > 0 && Math.random() * 100 < fluxChance) {
+      this._log(`${attacker.card.name} surges! Attacking again!`);
+      // Pick a new target (the same or another live enemy agent, or player if none)
+      const liveTargets = enemy.field.filter((c) => c.card.type === 'agent' && c.currentDefense > 0);
+      if (liveTargets.length > 0) {
+        const t2 = liveTargets[Math.floor(Math.random() * liveTargets.length)];
+        const surgeArmor = t2.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
+        const surgeDmg = Math.max(0, attacker.currentAttack - surgeArmor);
+        this._dealDamageToAgent(t2, enemy, surgeDmg, attacker, player);
+        this._dealDamageToAgent(attacker, player, Math.max(0, t2.currentAttack - (attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0)));
+      } else {
+        // No agents left — hit player directly
+        enemy.health -= attacker.currentAttack;
+        this._log(`${attacker.card.name} surge hits player for ${attacker.currentAttack}`);
+      }
+    }
+
     this._checkWinCondition();
 
     return { type: 'combat', attacker, blocker: defender, attackerDmg, blockerDmg: defenderDmg, target: 'agent' };
@@ -975,6 +1044,13 @@ export class BattleEngine {
       const healed = Math.ceil(effectiveDmg * drainPct / 100);
       player.health = Math.min(player.maxHealth, player.health + healed);
       this._log(`${attacker.card.name} drains ${healed} life! (${drainPct}%)`);
+    }
+
+    // Flux Surge: chance to attack again
+    const fluxDirect = getSpecialValue(attacker, 'fluxsurge');
+    if (fluxDirect > 0 && attacker.currentDefense > 0 && Math.random() * 100 < fluxDirect) {
+      this._log(`${attacker.card.name} surges! Attacking player again!`);
+      enemy.health -= Math.max(0, attacker.currentAttack - this.calculateShield('enemy'));
     }
 
     this._checkWinCondition();
@@ -1149,6 +1225,19 @@ export class BattleEngine {
           this._applyDecayEffect(attacker, target, targetWillDie);
         }
         events.push({ type: 'combat', attacker, blocker: target, attackerDmg, blockerDmg: defenderDmg, target: 'agent' });
+
+        // Flux Surge: enemy agent attacks again
+        const eFlux = getSpecialValue(attacker, 'fluxsurge');
+        if (eFlux > 0 && attacker.currentDefense > 0 && Math.random() * 100 < eFlux) {
+          this._log(`Enemy ${attacker.card.name} surges! Attacking again!`);
+          const liveTargets = player.field.filter((c) => c.card.type === 'agent' && c.currentDefense > 0);
+          if (liveTargets.length > 0) {
+            const t2 = liveTargets[Math.floor(Math.random() * liveTargets.length)];
+            this._dealDamageToAgent(t2, player, Math.max(0, attacker.currentAttack - (t2.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0)), attacker, enemy);
+          } else {
+            player.health -= attacker.currentAttack;
+          }
+        }
       } else {
         // Attack player directly — shield reduces damage, breach bypasses
         const shield = this.calculateShield('player');
@@ -1163,6 +1252,12 @@ export class BattleEngine {
         if (drainPct > 0 && effectiveDmg > 0) {
           const healed = Math.ceil(effectiveDmg * drainPct / 100);
           enemy.health = Math.min(enemy.maxHealth, enemy.health + healed);
+        }
+        // Flux Surge: enemy agent attacks player again
+        const eFluxDirect = getSpecialValue(attacker, 'fluxsurge');
+        if (eFluxDirect > 0 && attacker.currentDefense > 0 && Math.random() * 100 < eFluxDirect) {
+          this._log(`Enemy ${attacker.card.name} surges! Attacking player again!`);
+          player.health -= Math.max(0, attacker.currentAttack - this.calculateShield('player'));
         }
         // Decay: direct hit can trigger memory_wipe / heap_corruption
         if (this.decayStage >= 2) {

@@ -77,4 +77,6 @@ export interface CardInPlay {
   playedOnTurn?: number;
   /** Number of turns this card has been in hand (for Memory Leak mod) */
   turnsInHand?: number;
+  /** Turns this agent has been on the field (for Overheating mod) */
+  turnsOnField?: number;
 }
