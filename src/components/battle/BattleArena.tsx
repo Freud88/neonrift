@@ -132,6 +132,16 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
       return;
     }
 
+    // Script/spell targeting: buff scripts targeting a friendly agent (target === 'self')
+    if (requiresTarget && selectedCardId && side === 'player') {
+      const pendingCard = battleState.player.hand.find((c) => c.instanceId === selectedCardId);
+      if (pendingCard?.card.effect?.target === 'self') {
+        playCard(selectedCardId, instanceId);
+        setRequiresTarget(false);
+        return;
+      }
+    }
+
     // Player clicks enemy agent while an attacker is selected → attack it
     if (side === 'enemy' && pendingAttackerId) {
       attackVsAgent(instanceId);
@@ -401,6 +411,10 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
           onSelect={handleCardSelect}
           onPlay={handlePlayCard}
           requiresTarget={requiresTarget}
+          targetIsFriendly={(() => {
+            const c = battleState?.player.hand.find((x) => x.instanceId === selectedCardId);
+            return c?.card.effect?.target === 'self';
+          })()}
           onCancelTarget={() => { setRequiresTarget(false); selectCard(null); }}
         />
       </div>

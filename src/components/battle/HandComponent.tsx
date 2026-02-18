@@ -18,6 +18,7 @@ interface HandComponentProps {
   onPlay: (instanceId: string, targetId?: string) => void;
   // For targeted spells: when a card is selected and needs a target
   requiresTarget: boolean;
+  targetIsFriendly?: boolean; // true when target must be a friendly agent (buff scripts)
   onCancelTarget: () => void;
 }
 
@@ -29,6 +30,7 @@ export default function HandComponent({
   onSelect,
   onPlay,
   requiresTarget,
+  targetIsFriendly = false,
   onCancelTarget,
 }: HandComponentProps) {
   const [previewCard, setPreviewCard] = useState<CardInPlay | null>(null);
@@ -82,7 +84,10 @@ export default function HandComponent({
               borderTop: '1px solid #ffe600',
             }}
           >
-            SELECT TARGET — tap enemy agent or enemy portrait  [TAP HAND TO CANCEL]
+            {targetIsFriendly
+              ? 'SELECT TARGET — tap a friendly agent  [TAP HAND TO CANCEL]'
+              : 'SELECT TARGET — tap enemy agent or enemy portrait  [TAP HAND TO CANCEL]'
+            }
           </motion.div>
         )}
       </AnimatePresence>
