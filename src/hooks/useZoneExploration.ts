@@ -15,6 +15,7 @@ const ENEMY_WANDER_SPEED = 0.7;
 const ENEMY_CHASE_SPEED = 1.4;
 const ENEMY_AGGRO_RANGE = 96;
 const ENEMY_WANDER_AREA = 3;
+const BOSS_CHASE_SPEED = 1.0;
 const INTERACTION_RANGE = 40;
 const CONTACT_COOLDOWN = 5000;
 
@@ -218,6 +219,20 @@ export function useZoneExploration(
               if (!engine.circleCollidesWithWalls(e.x, eny, e.radius)) e.y = eny;
             }
           }
+        }
+      }
+
+      // ── Boss AI: always chase player ──────────────────────────────────
+      for (const e of entities) {
+        if (e.type !== 'boss_gate' || e.defeated) continue;
+        const bdx = pl.x - e.x;
+        const bdy = pl.y - e.y;
+        const bd = Math.hypot(bdx, bdy);
+        if (bd > e.radius + pl.radius + 4) {
+          const bnx = e.x + (bdx / bd) * BOSS_CHASE_SPEED;
+          const bny = e.y + (bdy / bd) * BOSS_CHASE_SPEED;
+          if (!engine.circleCollidesWithWalls(bnx, e.y, e.radius)) e.x = bnx;
+          if (!engine.circleCollidesWithWalls(e.x, bny, e.radius)) e.y = bny;
         }
       }
 

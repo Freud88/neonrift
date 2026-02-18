@@ -502,35 +502,43 @@ export class MapEngine {
 
   private drawBossGate(sx: number, sy: number) {
     const { ctx } = this;
-    const w = 28;
-    const h = 36;
     const pulse = 0.5 + 0.5 * Math.sin(this.frameCount * 0.05);
+    const r = 22;
 
+    // Outer pulsing ring
     ctx.shadowColor = '#ff0044';
-    ctx.shadowBlur = 16 * pulse;
+    ctx.shadowBlur = 24 * pulse;
+    ctx.strokeStyle = `rgba(255,0,68,${0.4 + 0.4 * pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r + 6 + 4 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
 
-    // Gate frame
+    // Inner circle fill
+    ctx.fillStyle = `rgba(255,0,68,${0.1 + 0.1 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Border
     ctx.strokeStyle = '#ff0044';
     ctx.lineWidth = 3;
-    ctx.strokeRect(sx - w / 2, sy - h / 2, w, h);
+    ctx.stroke();
 
-    // Inner fill
-    ctx.fillStyle = `rgba(255,0,68,${0.08 + 0.07 * pulse})`;
-    ctx.fillRect(sx - w / 2, sy - h / 2, w, h);
-
-    // Warning icon
-    ctx.font = 'bold 14px monospace';
+    // Skull icon
+    ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#ff0044';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('⚡', sx, sy);
+    ctx.fillText('☠', sx, sy);
     ctx.textBaseline = 'alphabetic';
 
+    // Label
     ctx.shadowBlur = 0;
-    ctx.font = 'bold 7px monospace';
+    ctx.font = 'bold 8px monospace';
     ctx.fillStyle = '#ff0044';
     ctx.textAlign = 'center';
-    ctx.fillText('BOSS GATE', sx, sy - h / 2 - 6);
+    ctx.fillText('★ BOSS ★', sx, sy - r - 8);
   }
 
   private drawTerminal(sx: number, sy: number) {
@@ -605,10 +613,19 @@ export class MapEngine {
       else if (e.type === 'terminal') col = '#ffe600';
 
       miniCtx.fillStyle = col;
-      const dot = e.type === 'player' ? 3 : 2;
+      const dot = e.type === 'player' ? 3 : e.type === 'boss_gate' ? 4 : 2;
       miniCtx.beginPath();
       miniCtx.arc(mx, my, dot, 0, Math.PI * 2);
       miniCtx.fill();
+      // Boss pulsing ring on minimap
+      if (e.type === 'boss_gate') {
+        const bp = 0.5 + 0.5 * Math.sin(this.frameCount * 0.08);
+        miniCtx.strokeStyle = `rgba(255,0,68,${bp})`;
+        miniCtx.lineWidth = 1;
+        miniCtx.beginPath();
+        miniCtx.arc(mx, my, 6 + 2 * bp, 0, Math.PI * 2);
+        miniCtx.stroke();
+      }
     }
 
     // Camera viewport rect

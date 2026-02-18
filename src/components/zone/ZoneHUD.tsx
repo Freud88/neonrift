@@ -113,7 +113,7 @@ export default function ZoneHUD({
         {/* Boss status */}
         {gridKeyForged && !bossDefeated && (
           <div style={{ color: '#ff0044', fontSize: 9, textAlign: 'center', marginTop: 2 }}>
-            BOSS SPAWNED — FIND THE RIFT GATE
+            ☠ BOSS APPROACHING — PREPARE FOR BATTLE
           </div>
         )}
         {bossDefeated && (
