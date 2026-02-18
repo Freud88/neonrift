@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Card, CardInPlay } from '@/types/card';
@@ -9,30 +9,9 @@ import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
 import CardArt from './CardArt';
 
-// ── Frame PNG: load once, cache as data URL (user already removed white border) ─
-let frameSrc: string = '/Cards/Frame Agents.png';
-let frameReady = false;
-let frameCallbacks: (() => void)[] = [];
-
-function loadProcessedFrame(onReady: () => void) {
-  if (frameReady) { onReady(); return; }
-  frameCallbacks.push(onReady);
-  if (frameCallbacks.length > 1) return;
-  const img = new window.Image();
-  img.src = '/Cards/Frame Agents.png';
-  img.onload = () => {
-    // PNG already has transparent outer border — just cache as-is
-    frameSrc = img.src;
-    frameReady = true;
-    frameCallbacks.forEach(cb => cb());
-    frameCallbacks = [];
-  };
-  img.onerror = () => {
-    frameReady = true;
-    frameCallbacks.forEach(cb => cb());
-    frameCallbacks = [];
-  };
-}
+// ── Frame PNG: pre-processed (white pixels removed, cropped to bounding box) ──
+// No runtime processing needed — just use the PNG directly
+const frameSrc = '/Cards/Frame Agents.png';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
@@ -59,24 +38,24 @@ const SIZE_DIMS: Record<CardSize, { w: number; h: number; fontSize: number }> = 
   mini:    { w: 48,  h: 64,  fontSize: 6   },
 };
 
-// ── Frame zone proportions (measured from reference frame PNG 1024×1536) ──────
-// Name bar:    top 4.5%–11%   of card height
-// Artwork:     top 11%–67%    of card height
-// Text area:   top 67%–89%    of card height (dark zone)
-// Stats bar:   top 89%–97%    of card height (bottom strip)
-// Cost badge:  top 4%–11%, left 3%–16%
+// ── Frame zone proportions (measured from processed frame PNG 988×1328) ───────
+// Name bar:    top 2%–12%    of card height  (dark top section)
+// Artwork:     top 12%–69%   of card height  (transparent window)
+// Text area:   top 69%–85%   of card height  (dark text zone)
+// Stats bar:   top 94%–100%  of card height  (bottom light strip)
+// Cost badge:  top 2%–12%, left 3%–18%
 
 const F = {
-  nameTop:    0.045,
-  nameBot:    0.110,
-  artTop:     0.110,
-  artBot:     0.670,
-  textTop:    0.670,
-  textBot:    0.890,
-  statsTop:   0.890,
-  statsBot:   0.970,
-  costLeft:   0.030,
-  costRight:  0.160,
+  nameTop:    0.02,
+  nameBot:    0.12,
+  artTop:     0.12,
+  artBot:     0.69,
+  textTop:    0.69,
+  textBot:    0.85,
+  statsTop:   0.94,
+  statsBot:   1.00,
+  costLeft:   0.03,
+  costRight:  0.18,
 };
 
 // ── Shared card interior layout (used by both card and hover preview) ─────────
@@ -123,20 +102,12 @@ function CardLayout({
 
   return (
     <>
-      {/* ── Artwork (clipped to art zone) */}
-      <div style={{
-        position: 'absolute',
-        top: artTop, left: 0, width: w, height: artH,
-        overflow: 'hidden',
-        zIndex: 1,
-      }}>
-        {/* Offset canvas so art zone aligns: shift up by artTop so art starts at card top */}
-        <div style={{ position: 'absolute', top: -artTop, left: 0 }}>
-          <CardArt card={card} width={w} height={h} />
-        </div>
+      {/* ── Artwork behind frame — fills entire card, visible through transparent window */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+        <CardArt card={card} width={w} height={h} />
       </div>
 
-      {/* ── Frame PNG on top of artwork */}
+      {/* ── Frame PNG on top of artwork (has transparent window at 12%–69%) */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={frameSrc}
@@ -349,13 +320,8 @@ export default function CardComponent({
   onClick,
 }: CardComponentProps) {
   const [hovered, setHovered] = useState(false);
-  const [, forceUpdate] = useState(0);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ec = ENERGY_COLORS[card.energy];
-
-  useEffect(() => {
-    if (!frameReady) loadProcessedFrame(() => forceUpdate(n => n + 1));
-  }, []);
 
   const { w, h, fontSize } = SIZE_DIMS[size];
   const cardMods = card.mods;
