@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Card } from '@/types/card';
 import { seededRandom } from '@/utils/seededRandom';
 import { MOD_MAP } from '@/data/mods';
@@ -15,29 +15,176 @@ const ENERGY_BASE: Record<string, [string, string]> = {
   neutral: ['#0d0d1a', '#8888cc'],
 };
 
-// Module-level cache so we only fetch once per session
-let agentArtCache: string[] | null = null;
-let agentArtPromise: Promise<string[]> | null = null;
-
-function fetchAgentArt(): Promise<string[]> {
-  if (agentArtCache) return Promise.resolve(agentArtCache);
-  if (agentArtPromise) return agentArtPromise;
-  agentArtPromise = fetch('/api/card-art')
-    .then((r) => r.json())
-    .then((files: string[]) => {
-      agentArtCache = files.length > 0 ? files : ['/Cards/Art/Agent 1.png'];
-      return agentArtCache;
-    })
-    .catch(() => {
-      agentArtCache = ['/Cards/Art/Agent 1.png'];
-      return agentArtCache;
-    });
-  return agentArtPromise;
-}
-
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// ── Procedural agent art ─────────────────────────────────────────────────────
+function drawAgentArt(
+  ctx: CanvasRenderingContext2D,
+  card: Card,
+  width: number,
+  height: number,
+) {
+  const modKey = card.mods?.mods.map((m) => `${m.modId}_T${m.tier}`).sort().join('_') ?? '';
+  const seed = `agent__${card.id}__${modKey}`;
+  const rng = seededRandom(seed);
+
+  const [bgColor, accentColor] = ENERGY_BASE[card.energy] ?? ENERGY_BASE.neutral;
+  const [ar, ag, ab] = hexToRgb(accentColor);
+
+  ctx.clearRect(0, 0, width, height);
+
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, height, width, 0);
+  grad.addColorStop(0, bgColor);
+  grad.addColorStop(0.6, `rgba(${ar},${ag},${ab},0.08)`);
+  grad.addColorStop(1, bgColor);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid lines (tech floor)
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < width; x += 8) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+  }
+  for (let y = 0; y < height; y += 8) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+  }
+  ctx.restore();
+
+  const cx = width / 2;
+  const cy = height * 0.52;
+
+  // Body silhouette (geometric humanoid)
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+
+  // Torso
+  const torsoW = width * 0.28;
+  const torsoH = height * 0.3;
+  const torsoY = cy - torsoH * 0.3;
+  ctx.fillStyle = `rgba(${ar},${ag},${ab},0.25)`;
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(cx - torsoW / 2, torsoY, torsoW, torsoH);
+  ctx.fill();
+  ctx.stroke();
+
+  // Head (hexagon)
+  const headR = width * 0.13;
+  const headY = torsoY - headR * 1.1;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 - Math.PI / 6;
+    const px = cx + Math.cos(angle) * headR;
+    const py = headY + Math.sin(angle) * headR;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Eye glow
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = accentColor;
+  const eyeW = headR * 0.55;
+  const eyeH = headR * 0.15;
+  ctx.beginPath();
+  ctx.ellipse(cx, headY, eyeW, eyeH, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Shadow glow under eye
+  ctx.globalAlpha = 0.35;
+  const eyeGlow = ctx.createRadialGradient(cx, headY, 0, cx, headY, headR);
+  eyeGlow.addColorStop(0, accentColor);
+  eyeGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = eyeGlow;
+  ctx.beginPath();
+  ctx.ellipse(cx, headY, headR, headR * 0.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Arms
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = width * 0.06;
+  ctx.lineCap = 'round';
+  // Left arm
+  const armY = torsoY + torsoH * 0.2;
+  const armLen = torsoH * 0.55;
+  const armAngle = 0.3 + rng() * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(cx - torsoW / 2, armY);
+  ctx.lineTo(cx - torsoW / 2 - Math.cos(armAngle) * armLen, armY + Math.sin(armAngle) * armLen);
+  ctx.stroke();
+  // Right arm
+  ctx.beginPath();
+  ctx.moveTo(cx + torsoW / 2, armY);
+  ctx.lineTo(cx + torsoW / 2 + Math.cos(armAngle) * armLen, armY + Math.sin(armAngle) * armLen);
+  ctx.stroke();
+
+  // Legs
+  ctx.lineWidth = width * 0.07;
+  const legTop = torsoY + torsoH;
+  const legLen = height * 0.22;
+  const legSpread = torsoW * 0.28;
+  ctx.beginPath();
+  ctx.moveTo(cx - legSpread, legTop);
+  ctx.lineTo(cx - legSpread - width * 0.04, legTop + legLen);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + legSpread, legTop);
+  ctx.lineTo(cx + legSpread + width * 0.04, legTop + legLen);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Chest detail — energy core
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  const coreR = width * 0.055;
+  const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2);
+  coreGrad.addColorStop(0, accentColor);
+  coreGrad.addColorStop(0.4, `rgba(${ar},${ag},${ab},0.5)`);
+  coreGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreR * 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = accentColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreR * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Scanline effect
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = accentColor;
+  for (let y = 0; y < height; y += 3) {
+    ctx.fillRect(0, y, width, 1);
+  }
+  ctx.restore();
+
+  // Particle dots
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = accentColor;
+  const dotCount = 5 + Math.floor(rng() * 5);
+  for (let i = 0; i < dotCount; i++) {
+    const px = Math.floor(rng() * width);
+    const py = Math.floor(rng() * height);
+    ctx.beginPath();
+    ctx.arc(px, py, rng() * 1.5 + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ── Procedural canvas art (non-agent types) ──────────────────────────────────
@@ -292,20 +439,6 @@ function drawProceduralArt(
 // ── Component ────────────────────────────────────────────────────────────────
 export default function CardArt({ card, width, height }: { card: Card; width: number; height: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [agentArtList, setAgentArtList] = useState<string[]>(agentArtCache ?? []);
-
-  const isAgent = card.type === 'agent';
-
-  // Load agent art list once (cached at module level)
-  useEffect(() => {
-    if (!isAgent) return;
-    fetchAgentArt().then(setAgentArtList);
-  }, [isAgent]);
-
-  // Art pick: use artIndex assigned at generation time (random per card instance)
-  const pool = agentArtList.length > 0 ? agentArtList : ['/Cards/Art/Agent 1.png'];
-  const artIdx = card.artIndex ?? 0;
-  const agentArtSrc = pool[artIdx % pool.length];
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -313,20 +446,12 @@ export default function CardArt({ card, width, height }: { card: Card; width: nu
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (isAgent) {
-      const artImg = new window.Image();
-      artImg.src = agentArtSrc;
-      const draw = () => {
-        ctx.clearRect(0, 0, width, height);
-        if (artImg.complete && artImg.naturalWidth > 0) {
-          ctx.drawImage(artImg, 0, 0, width, height);
-        }
-      };
-      if (artImg.complete) draw(); else artImg.onload = draw;
+    if (card.type === 'agent') {
+      drawAgentArt(ctx, card, width, height);
     } else {
       drawProceduralArt(ctx, card, width, height);
     }
-  }, [card, width, height, isAgent, agentArtSrc]);
+  }, [card, width, height]);
 
   return (
     <canvas
