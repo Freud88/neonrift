@@ -73,8 +73,8 @@ function CardFrame({
 
   // Zone heights — dynamically shift art→body when many mods
   const headerH = Math.round(h * 0.13);
-  const artPct  = modSlots >= 5 ? 0.22 : modSlots >= 4 ? 0.28 : 0.37;
-  const bodyPct = modSlots >= 5 ? 0.55 : modSlots >= 4 ? 0.49 : 0.40;
+  const artPct  = modSlots >= 5 ? 0.28 : modSlots >= 4 ? 0.32 : 0.37;
+  const bodyPct = modSlots >= 5 ? 0.49 : modSlots >= 4 ? 0.45 : 0.40;
   const artH    = Math.round(h * artPct);
   const bodyH   = Math.round(h * bodyPct);
   const footerH = h - headerH - artH - bodyH;
