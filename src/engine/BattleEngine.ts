@@ -426,11 +426,10 @@ export class BattleEngine {
         totalDamageDealt += dmg;
       }
 
-      // ── Forked: queue second launch for player to target ──
-      if (forkedEfficacy > 0) {
-        const forkedDmg = Math.max(1, Math.floor(dmg * forkedEfficacy / 100));
-        this.state.pendingFork = { dmg: forkedDmg, sourceCard: inPlay };
-        this._log(`Forked: ${inPlay.card.name} queues second launch (${forkedDmg} dmg)`);
+      // ── Forked: % chance to queue a second full-damage launch ──
+      if (forkedEfficacy > 0 && Math.random() * 100 < forkedEfficacy) {
+        this.state.pendingFork = { dmg, sourceCard: inPlay };
+        this._log(`Forked: ${inPlay.card.name} procs second launch (${dmg} dmg)`);
       }
 
       // ── Drain: lifesteal (percentage of total damage dealt) ──

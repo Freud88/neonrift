@@ -250,8 +250,8 @@ export const MODS: Mod[] = [
   },
   {
     id: 'P27', name: 'Forked', type: 'prefix', applicableTo: ['script'], weight: 150,
-    tiers: build(pt(50, 100), v => ({
-      description: v >= 100 ? 'Launches effect twice at 100% efficacy' : `Launches effect twice at ${v}% efficacy`,
+    tiers: build(pt(10, 100), v => ({
+      description: v >= 100 ? 'Guaranteed to launch again at full damage' : `${v}% chance to launch again at full damage`,
       special: 'forked', specialValue: v,
     })),
   },
