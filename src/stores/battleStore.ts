@@ -5,6 +5,7 @@ import { BattleEngine, type BattleState, type AttackEvent } from '@/engine/Battl
 import { AIEngine } from '@/engine/AIEngine';
 import { ENEMIES } from '@/data/enemies';
 import { CARD_MAP } from '@/data/cards';
+import { applyModStats } from '@/utils/cardMods';
 import type { EnemyProfile } from '@/types/enemy';
 import type { Card, CardInPlay } from '@/types/card';
 import type { AIType } from '@/types/enemy';
@@ -70,7 +71,15 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       .map((id) => CARD_MAP[id])
       .filter(Boolean) as Card[];
 
-    const engine = new BattleEngine(playerDeck, enemyCards, enemyProfileId, profile.health);
+    // Re-bake mod stats at battle start so all cards (including old saves) have
+    // correct cost/atk/def/effect.value regardless of when they were crafted.
+    const bakedDeck = playerDeck.map((card) => {
+      if (!card.mods?.mods.length) return card;
+      const base = CARD_MAP[card.id] ?? card;
+      return { ...base, ...applyModStats(base, card.mods.mods), mods: card.mods, uniqueId: card.uniqueId, artIndex: card.artIndex };
+    });
+
+    const engine = new BattleEngine(bakedDeck, enemyCards, enemyProfileId, profile.health);
     const ai     = new AIEngine(engine, profile.aiType as AIType);
 
     set({
