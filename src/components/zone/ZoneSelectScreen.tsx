@@ -25,14 +25,19 @@ interface ZoneSelectScreenProps {
   onBack: () => void;
 }
 
-const DEBUG_MAX_LEVEL = 50; // [DEBUG] show all levels up to this; remove cap before release
-
 export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: ZoneSelectScreenProps) {
   const [selected, setSelected] = useState<number>(maxLevel);
+  const [debugInput, setDebugInput] = useState<string>('');
 
   const biome = BIOME_ORDER[(selected - 1) % BIOME_ORDER.length];
   const biomeInfo = BIOME_DISPLAY[biome];
   const shardsRequired = Math.min(15, 3 + Math.floor(selected / 3));
+  const isDebugLevel = selected > maxLevel;
+
+  const applyDebugLevel = () => {
+    const n = parseInt(debugInput, 10);
+    if (!isNaN(n) && n >= 1) { setSelected(n); setDebugInput(''); }
+  };
 
   return (
     <div style={{
@@ -53,24 +58,23 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
         <NeonButton variant="ghost" size="sm" onClick={onBack}>{'<'} BACK</NeonButton>
       </div>
 
-      {/* Level grid */}
+      {/* Unlocked level grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
         gap: 8,
         width: '100%',
         maxWidth: 600,
-        marginBottom: 24,
+        marginBottom: 12,
         maxHeight: 280,
         overflowY: 'auto',
         padding: '4px 0',
       }}>
-        {Array.from({ length: DEBUG_MAX_LEVEL }, (_, i) => {
+        {Array.from({ length: maxLevel }, (_, i) => {
           const level = i + 1;
           const b = BIOME_ORDER[(level - 1) % BIOME_ORDER.length];
           const info = BIOME_DISPLAY[b];
           const isSelected = selected === level;
-          const isLocked = level > maxLevel;
           return (
             <motion.button
               key={level}
@@ -79,8 +83,8 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
               onClick={() => setSelected(level)}
               style={{
                 background: isSelected ? `rgba(0,240,255,0.12)` : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${isSelected ? info.color : isLocked ? '#1a1a33' : '#222244'}`,
-                color: isSelected ? info.color : isLocked ? '#333355' : '#6666aa',
+                border: `1px solid ${isSelected ? info.color : '#222244'}`,
+                color: isSelected ? info.color : '#6666aa',
                 padding: '10px 6px',
                 cursor: 'pointer',
                 fontSize: 12,
@@ -89,15 +93,56 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
                 alignItems: 'center',
                 gap: 2,
                 borderRadius: 3,
-                opacity: isLocked ? 0.5 : 1,
               }}
             >
               <span style={{ fontSize: 16 }}>{info.icon}</span>
               <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 13 }}>L{level}</span>
-              {isLocked && <span style={{ fontSize: 7, color: '#ff4444', letterSpacing: '0.05em' }}>DBG</span>}
             </motion.button>
           );
         })}
+      </div>
+
+      {/* [DEBUG] jump-to-level input */}
+      <div style={{
+        display: 'flex', gap: 6, alignItems: 'center',
+        width: '100%', maxWidth: 600, marginBottom: 20,
+        padding: '8px 10px',
+        border: '1px solid #1a1a33',
+        background: 'rgba(255,50,50,0.04)',
+      }}>
+        <span style={{ fontSize: 9, color: '#ff4444', letterSpacing: '0.1em', flexShrink: 0 }}>[DEBUG] JUMP TO LEVEL</span>
+        <input
+          type="number"
+          min={1}
+          value={debugInput}
+          onChange={(e) => setDebugInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && applyDebugLevel()}
+          placeholder={`> ${maxLevel}`}
+          style={{
+            flex: 1,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid #333355',
+            color: '#ff4444',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 11,
+            padding: '3px 8px',
+            outline: 'none',
+          }}
+        />
+        <button
+          onClick={applyDebugLevel}
+          style={{
+            background: 'rgba(255,50,50,0.12)',
+            border: '1px solid #ff4444',
+            color: '#ff4444',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 10,
+            padding: '3px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          GO
+        </button>
       </div>
 
       {/* Selected level preview */}
@@ -108,7 +153,7 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
         style={{
           width: '100%',
           maxWidth: 600,
-          border: `1px solid ${biomeInfo.color}`,
+          border: `1px solid ${isDebugLevel ? '#ff4444' : biomeInfo.color}`,
           background: 'rgba(10,10,30,0.8)',
           padding: '20px 24px',
           marginBottom: 24,
@@ -116,10 +161,10 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: biomeInfo.color, letterSpacing: '0.15em' }}>
+            <p style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 16, color: isDebugLevel ? '#ff4444' : biomeInfo.color, letterSpacing: '0.15em' }}>
               {biomeInfo.icon} LEVEL {selected}
             </p>
-            <p style={{ fontSize: 11, color: biomeInfo.color, opacity: 0.7, marginTop: 4 }}>
+            <p style={{ fontSize: 11, color: isDebugLevel ? '#ff4444' : biomeInfo.color, opacity: 0.7, marginTop: 4 }}>
               {biomeInfo.name}
             </p>
           </div>
@@ -134,7 +179,7 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
               HIGHEST
             </span>
           )}
-          {selected > maxLevel && (
+          {isDebugLevel && (
             <span style={{
               fontSize: 9,
               color: '#ff4444',
