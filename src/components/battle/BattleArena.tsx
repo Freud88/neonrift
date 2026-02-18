@@ -34,6 +34,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
     doMulligan,
     selectCard,
     playCard,
+    resolveFork,
     selectAttacker,
     attackVsAgent,
     attackVsPlayer,
@@ -50,6 +51,7 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const [rewardCards, setRewardCards]         = useState<Card[]>([]);
   const [craftingDrop, setCraftingDrop]       = useState<CraftingItemId | null>(null);
   const [requiresTarget, setRequiresTarget] = useState(false);
+  const pendingFork = battleState?.pendingFork ?? null;
   const [damageEvents, setDamageEvents]     = useState<DamageEvent[]>([]);
   const [shake, setShake]                   = useState(false);
   const prevPlayerHp = useRef<number | null>(null);
@@ -125,6 +127,12 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
   const handleFieldClick = useCallback((instanceId: string, side: 'player' | 'enemy') => {
     if (!battleState || battleState.phase !== 'player_turn' || isAnimating) return;
 
+    // Forked: resolve second launch on chosen target
+    if (pendingFork && side === 'enemy') {
+      resolveFork(instanceId);
+      return;
+    }
+
     // Script/spell targeting: play card on enemy agent
     if (requiresTarget && selectedCardId && side === 'enemy') {
       playCard(selectedCardId, instanceId);
@@ -160,6 +168,12 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
 
   const handleEnemyPortraitClick = useCallback(() => {
     if (!battleState || battleState.phase !== 'player_turn' || isAnimating) return;
+
+    // Forked: resolve second launch on enemy player
+    if (pendingFork) {
+      resolveFork('enemy_player');
+      return;
+    }
 
     // Script targeting → enemy player
     if (requiresTarget && selectedCardId) {
@@ -410,11 +424,12 @@ export default function BattleArena({ enemyId, enemyProfileId, enemyProfile: ove
           isPlayerTurn={isPlayerTurn && !isAnimating}
           onSelect={handleCardSelect}
           onPlay={handlePlayCard}
-          requiresTarget={requiresTarget}
-          targetIsFriendly={(() => {
+          requiresTarget={requiresTarget || !!pendingFork}
+          targetIsFriendly={!pendingFork && (() => {
             const c = battleState?.player.hand.find((x) => x.instanceId === selectedCardId);
             return c?.card.effect?.target === 'self';
           })()}
+          forkDmg={pendingFork?.dmg}
           onCancelTarget={() => { setRequiresTarget(false); selectCard(null); }}
         />
       </div>

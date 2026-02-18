@@ -8,7 +8,7 @@ import { MODS, MOD_MAP } from '@/data/mods';
 import { rarityFromModCount, pickSingleMod, applyModStats } from '@/utils/cardMods';
 import { generateCardName } from '@/utils/nameGenerator';
 import { CARD_MAP } from '@/data/cards';
-import type { Card } from '@/types/card';
+import type { Card, CardType, EnergyType } from '@/types/card';
 import type { CraftingItemId } from '@/types/game';
 import { MAX_TIER } from '@/utils/tierUtils';
 import CardComponent from '@/components/battle/CardComponent';
@@ -25,6 +25,8 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
   const [activeItem, setActiveItem] = useState<CraftingItemId | null>(null);
   const [flashMsg, setFlashMsg] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [filterType, setFilterType] = useState<CardType | 'all'>('all');
+  const [filterEnergy, setFilterEnergy] = useState<EnergyType | 'all'>('all');
 
   const inventory = gameState?.inventory ?? [];
   const collection = gameState?.collection ?? [];
@@ -280,30 +282,84 @@ export default function CraftingPanel({ onClose }: CraftingPanelProps) {
           <NeonButton variant="ghost" size="sm" onClick={onClose}>✕ CLOSE</NeonButton>
         </div>
 
-        <div style={{ padding: '12px 16px', flexShrink: 0 }}>
-          <p style={{ fontSize: 10, color: '#6666aa', letterSpacing: '0.15em' }}>
-            SELECT A CARD TO MODIFY
-          </p>
+        {/* Filters */}
+        <div style={{ padding: '8px 16px', flexShrink: 0, borderBottom: '1px solid rgba(0,240,255,0.1)' }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+            {(['all', 'agent', 'script', 'malware', 'trap'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setFilterType(t)}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 9,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                  background: filterType === t ? 'rgba(0,240,255,0.15)' : 'transparent',
+                  border: filterType === t ? '1px solid #00f0ff' : '1px solid rgba(255,255,255,0.1)',
+                  color: filterType === t ? '#00f0ff' : '#6666aa',
+                  borderRadius: 2,
+                }}
+              >
+                {t.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {([
+              { id: 'all', label: 'ALL', color: '#888888' },
+              { id: 'volt', label: 'VOLT', color: '#ffe600' },
+              { id: 'cipher', label: 'CIPHER', color: '#00f0ff' },
+              { id: 'rust', label: 'RUST', color: '#ff6600' },
+              { id: 'phantom', label: 'PHANTOM', color: '#cc44ff' },
+              { id: 'synth', label: 'SYNTH', color: '#39ff14' },
+              { id: 'neutral', label: 'NEUTRAL', color: '#aaaaaa' },
+            ] as { id: EnergyType | 'all'; label: string; color: string }[]).map(({ id, label, color }) => (
+              <button
+                key={id}
+                onClick={() => setFilterEnergy(id)}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 9,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                  background: filterEnergy === id ? `${color}22` : 'transparent',
+                  border: filterEnergy === id ? `1px solid ${color}` : '1px solid rgba(255,255,255,0.1)',
+                  color: filterEnergy === id ? color : '#6666aa',
+                  borderRadius: 2,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Card grid */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 12 }}>
             {collection.length === 0 && (
               <p style={{ fontSize: 11, color: '#444466', padding: 20 }}>
                 No cards in collection. Win some battles first!
               </p>
             )}
-            {collection.map((card, i) => (
-              <motion.div
-                key={card.id + i + (card.mods?.displayName ?? '')}
-                whileHover={{ y: -6, scale: 1.02 }}
-                onClick={() => { setSelectedCard(card); setSelectedIndex(i); }}
-                style={{ cursor: 'pointer', borderRadius: 4 }}
-              >
-                <CardComponent card={card} size="hand" selected={false} />
-              </motion.div>
-            ))}
+            {collection
+              .map((card, i) => ({ card, i }))
+              .filter(({ card }) =>
+                (filterType === 'all' || card.type === filterType) &&
+                (filterEnergy === 'all' || card.energy === filterEnergy)
+              )
+              .map(({ card, i }) => (
+                <motion.div
+                  key={card.id + i + (card.mods?.displayName ?? '')}
+                  whileHover={{ y: -6, scale: 1.02 }}
+                  onClick={() => { setSelectedCard(card); setSelectedIndex(i); }}
+                  style={{ cursor: 'pointer', borderRadius: 4 }}
+                >
+                  <CardComponent card={card} size="hand" selected={false} />
+                </motion.div>
+              ))}
           </div>
         </div>
       </div>

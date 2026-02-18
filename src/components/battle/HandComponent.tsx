@@ -19,6 +19,7 @@ interface HandComponentProps {
   // For targeted spells: when a card is selected and needs a target
   requiresTarget: boolean;
   targetIsFriendly?: boolean; // true when target must be a friendly agent (buff scripts)
+  forkDmg?: number;           // set when resolving Forked second launch
   onCancelTarget: () => void;
 }
 
@@ -31,6 +32,7 @@ export default function HandComponent({
   onPlay,
   requiresTarget,
   targetIsFriendly = false,
+  forkDmg,
   onCancelTarget,
 }: HandComponentProps) {
   const [previewCard, setPreviewCard] = useState<CardInPlay | null>(null);
@@ -84,9 +86,11 @@ export default function HandComponent({
               borderTop: '1px solid #ffe600',
             }}
           >
-            {targetIsFriendly
-              ? 'SELECT TARGET — tap a friendly agent  [TAP HAND TO CANCEL]'
-              : 'SELECT TARGET — tap enemy agent or enemy portrait  [TAP HAND TO CANCEL]'
+            {forkDmg !== undefined
+              ? `FORKED — select second target for ${forkDmg} damage`
+              : targetIsFriendly
+                ? 'SELECT TARGET — tap a friendly agent  [TAP HAND TO CANCEL]'
+                : 'SELECT TARGET — tap enemy agent or enemy portrait  [TAP HAND TO CANCEL]'
             }
           </motion.div>
         )}

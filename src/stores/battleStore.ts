@@ -36,6 +36,7 @@ interface BattleStoreState {
   acceptHand: () => void;
   selectCard: (instanceId: string | null) => void;
   playCard: (instanceId: string, targetId?: string) => boolean;
+  resolveFork: (targetId: string) => void;
   /** Select a player agent as the attacker (first click) */
   selectAttacker: (instanceId: string | null) => void;
   /** Attack a specific enemy agent with the selected attacker */
@@ -121,6 +122,13 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       });
     }
     return ok;
+  },
+
+  resolveFork: (targetId) => {
+    const { engine } = get();
+    if (!engine) return;
+    engine.resolveFork(targetId);
+    set({ battleState: { ...engine.getState() } });
   },
 
   selectAttacker: (instanceId) => {

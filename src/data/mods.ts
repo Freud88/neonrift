@@ -56,9 +56,9 @@ function allSameNeg(effect: ModEffect, freeFrom: number = 9): Record<number, Mod
 function uselessTiers(desc: string): Record<number, ModEffect> {
   return Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1,
     i < 7 ? { description: desc, isUseless: true }
-    : i === 7 ? { description: '+1 ATK', atkBonus: 1 }
-    : i === 8 ? { description: '+1 ATK, +1 DEF', atkBonus: 1, defBonus: 1 }
-    : { description: '+2 ATK, +2 DEF', atkBonus: 2, defBonus: 2 },
+    : i === 7 ? { description: '-1 Cost', costReduction: 1 }
+    : i === 8 ? { description: '-1 Cost', costReduction: 1 }
+    : { description: '-2 Cost (min 0)', costReduction: 2 },
   ]));
 }
 

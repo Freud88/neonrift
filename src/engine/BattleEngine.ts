@@ -109,6 +109,8 @@ export interface BattleState {
   pendingAttacks: { attacker: CardInPlay; blocker: CardInPlay | null }[];
   result: 'pending' | 'win' | 'lose';
   log: string[];                // combat log for debug
+  /** Forked mod: second launch awaiting player target selection */
+  pendingFork: { dmg: number; sourceCard: CardInPlay } | null;
 }
 
 // ── BattleEngine ──────────────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ export class BattleEngine {
       pendingAttacks: [],
       result: 'pending',
       log: [],
+      pendingFork: null,
     };
 
     // Draw opening hands (4 cards each)
@@ -153,6 +156,34 @@ export class BattleEngine {
   }
 
   getState(): BattleState { return this.state; }
+
+  /** Resolve the pending Forked second launch on the chosen target. */
+  resolveFork(targetInstanceId: string): void {
+    const fork = this.state.pendingFork;
+    if (!fork) return;
+    this.state.pendingFork = null;
+    const opponent = this.state.enemy;
+    const owner    = this.state.player;
+    const { dmg, sourceCard } = fork;
+    const drainPct = getDrainPercent(sourceCard);
+    let dealt = 0;
+    if (targetInstanceId === 'enemy_player') {
+      this._dealScriptDamageToPlayer(sourceCard, opponent, dmg);
+      dealt = dmg;
+    } else {
+      const t = opponent.field.find((c) => c.instanceId === targetInstanceId);
+      if (t) {
+        this._dealDamageToAgent(t, opponent, dmg);
+        dealt = dmg;
+        this._log(`Forked hit: ${t.card.name} takes ${dmg} damage`);
+      }
+    }
+    if (drainPct > 0 && dealt > 0) {
+      const healed = Math.ceil(dealt * drainPct / 100);
+      owner.health = Math.min(owner.maxHealth, owner.health + healed);
+    }
+    this._checkWinCondition();
+  }
 
   // ── Mulligan ────────────────────────────────────────────────────────────────
 
@@ -395,15 +426,11 @@ export class BattleEngine {
         totalDamageDealt += dmg;
       }
 
-      // ── Forked: re-launch effect on random additional targets ──
-      if (forkedEfficacy > 0 && opponent.field.length > 0) {
+      // ── Forked: queue second launch for player to target ──
+      if (forkedEfficacy > 0) {
         const forkedDmg = Math.max(1, Math.floor(dmg * forkedEfficacy / 100));
-        const forkTarget = opponent.field[Math.floor(Math.random() * opponent.field.length)];
-        if (forkTarget && forkTarget.currentDefense > 0) {
-          this._dealDamageToAgent(forkTarget, opponent, forkedDmg);
-          totalDamageDealt += forkedDmg;
-          this._log(`Forked: ${forkTarget.card.name} takes ${forkedDmg} damage`);
-        }
+        this.state.pendingFork = { dmg: forkedDmg, sourceCard: inPlay };
+        this._log(`Forked: ${inPlay.card.name} queues second launch (${forkedDmg} dmg)`);
       }
 
       // ── Drain: lifesteal (percentage of total damage dealt) ──
