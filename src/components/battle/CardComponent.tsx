@@ -12,6 +12,16 @@ import CardArt from './CardArt';
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
 
+// ── Frame PNG mapping (ModRarity → public path) ───────────────────────────────
+const FRAME_MAP: Record<string, string> = {
+  common:      '/Cards/Art/frame_common.png',
+  coded:       '/Cards/Art/frame_coded.png',
+  enhanced:    '/Cards/Art/frame_enhanced.png',
+  overclocked: '/Cards/Art/frame_overclocked.png',
+  corrupted:   '/Cards/Art/frame_corrupted.png',
+  mythic:      '/Cards/Art/frame_mythic.png',
+};
+
 interface CardComponentProps {
   card: Card;
   inPlay?: CardInPlay;
@@ -356,6 +366,7 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
           borderRadius: 6,
           overflow: 'hidden',
           boxShadow: `0 0 0 2px ${accentColor}, 0 0 40px ${accentColor}88, 0 0 80px rgba(0,0,0,0.85)`,
+          position: 'relative',
         }}
       >
         <CardFrame
@@ -368,6 +379,25 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
           fontSize={10}
           fullDetail={true}
         />
+        {card.mods?.modRarity && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={FRAME_MAP[card.mods.modRarity] ?? FRAME_MAP.common}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              objectFit: 'fill',
+              zIndex: 5,
+              opacity: 0.55,
+              mixBlendMode: 'screen',
+            }}
+          />
+        )}
       </motion.div>
     </div>,
     document.body
@@ -485,16 +515,38 @@ export default function CardComponent({
             <span style={{ color: '#1a1a3a', fontSize: 20 }}>?</span>
           </div>
         ) : (
-          <CardFrame
-            card={card}
-            inPlay={inPlay}
-            ec={ec}
-            rarityBorderColor={card.isEchoed ? null : rarityBorderColor}
-            w={w}
-            h={h}
-            fontSize={fontSize}
-            fullDetail={false}
-          />
+          <>
+            <CardFrame
+              card={card}
+              inPlay={inPlay}
+              ec={ec}
+              rarityBorderColor={card.isEchoed ? null : rarityBorderColor}
+              w={w}
+              h={h}
+              fontSize={fontSize}
+              fullDetail={false}
+            />
+            {/* Frame PNG overlay — decorative border on top of content */}
+            {cardMods?.modRarity && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={FRAME_MAP[cardMods.modRarity] ?? FRAME_MAP.common}
+                alt=""
+                draggable={false}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  objectFit: 'fill',
+                  zIndex: 5,
+                  opacity: 0.55,
+                  mixBlendMode: 'screen',
+                }}
+              />
+            )}
+          </>
         )}
 
         {/* Echoed badge + shimmer overlay */}

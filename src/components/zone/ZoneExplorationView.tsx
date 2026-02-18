@@ -366,6 +366,7 @@ function RiftEventLog({ events }: { events: RiftEvent[] }) {
 
 import type { Card } from '@/types/card';
 import { CORRUPTION_MAP as CM } from '@/data/riftCorruptions';
+import CardComponent from '@/components/battle/CardComponent';
 
 function DeckViewer({
   deck,
@@ -379,109 +380,108 @@ function DeckViewer({
   const totalCost = deck.reduce((s, c) => s + c.cost, 0);
   const avgCost = deck.length > 0 ? (totalCost / deck.length).toFixed(1) : '0';
   const junkCount = deck.filter((c) => c.id === 'junk_data').length;
+  const agentCount = deck.filter((c) => c.type === 'agent').length;
+  const scriptCount = deck.filter((c) => c.type !== 'agent' && c.id !== 'junk_data').length;
+
+  // Sort: agents first, then scripts/malware/trap, then junk
+  const sorted = [...deck].sort((a, b) => {
+    const rank = (c: Card) => c.id === 'junk_data' ? 2 : c.type === 'agent' ? 0 : 1;
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    return a.cost - b.cost;
+  });
 
   return (
     <div
       style={{
         position: 'absolute',
         inset: 0,
-        background: 'rgba(0,0,0,0.88)',
+        background: 'rgba(0,0,0,0.92)',
         zIndex: 50,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backdropFilter: 'blur(4px)',
+        flexDirection: 'column',
+        backdropFilter: 'blur(6px)',
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: '#111',
-          border: '1px solid #00f0ff44',
-          borderRadius: 12,
-          width: '90%',
-          maxWidth: 480,
-          maxHeight: '80vh',
-          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          maxWidth: 960,
+          margin: '0 auto',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: '#00f0ff', fontFamily: 'var(--font-display, monospace)', fontSize: 14 }}>
-            📋 DECK — {deck.length} cards
-          </span>
+        <div style={{
+          padding: '12px 20px',
+          borderBottom: '1px solid #00f0ff33',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+            <span style={{ color: '#00f0ff', fontFamily: 'var(--font-display, monospace)', fontSize: 15, fontWeight: 700 }}>
+              📋 DECK — {deck.length} cards
+            </span>
+            <span style={{ fontSize: 11, color: '#555' }}>
+              Avg cost <span style={{ color: '#aaa' }}>{avgCost}</span>
+              {' · '}Agents <span style={{ color: '#39ff14' }}>{agentCount}</span>
+              {' · '}Scripts <span style={{ color: '#00f0ff' }}>{scriptCount}</span>
+              {junkCount > 0 && <><span style={{ color: '#555' }}>{' · '}</span><span style={{ color: '#ff4444' }}>Junk {junkCount}</span></>}
+            </span>
+          </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#666', fontSize: 18, cursor: 'pointer' }}
+            style={{ background: 'none', border: '1px solid #333', borderRadius: 4, color: '#888', fontSize: 13, cursor: 'pointer', padding: '4px 10px', fontFamily: 'monospace' }}
           >
-            ×
+            ✕ CLOSE
           </button>
-        </div>
-
-        {/* Stats bar */}
-        <div style={{ padding: '6px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: 16, fontSize: 11, color: '#555' }}>
-          <span>Avg cost: <span style={{ color: '#aaa' }}>{avgCost}</span></span>
-          {junkCount > 0 && <span style={{ color: '#ff4444' }}>Junk: {junkCount}</span>}
-          {corruptions.length > 0 && <span style={{ color: '#ff8800' }}>Corruptions: {corruptions.length}</span>}
         </div>
 
         {/* Active Corruptions */}
         {corruptions.length > 0 && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid #1a1a1a' }}>
-            <div style={{ fontSize: 10, color: '#555', marginBottom: 4 }}>ACTIVE CORRUPTIONS</div>
+          <div style={{
+            padding: '8px 20px',
+            borderBottom: '1px solid #ff440022',
+            display: 'flex',
+            gap: 12,
+            flexWrap: 'wrap',
+            flexShrink: 0,
+            background: 'rgba(255,40,0,0.04)',
+          }}>
+            <span style={{ fontSize: 10, color: '#555', alignSelf: 'center', flexShrink: 0 }}>CORRUPTIONS:</span>
             {corruptions.map((cid) => {
               const c = CM[cid];
               if (!c) return null;
               return (
-                <div key={cid} style={{ fontSize: 11, color: '#ff4444', marginBottom: 2 }}>
-                  {c.icon} <strong>{c.name}</strong>: {c.description}
-                </div>
+                <span key={cid} style={{ fontSize: 11, color: '#ff6644', background: 'rgba(255,40,0,0.12)', borderRadius: 4, padding: '2px 7px', border: '1px solid #ff444422' }}>
+                  {c.icon} {c.name}
+                </span>
               );
             })}
           </div>
         )}
 
-        {/* Deck list */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
-          {deck.map((card, i) => (
-            <div
+        {/* Card grid */}
+        <div style={{
+          overflowY: 'auto',
+          flex: 1,
+          padding: '16px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 10,
+          alignContent: 'flex-start',
+        }}>
+          {sorted.map((card, i) => (
+            <CardComponent
               key={card.uniqueId ?? `${card.id}_${i}`}
-              style={{
-                padding: '6px 16px',
-                borderBottom: '1px solid #111',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: card.id === 'junk_data' ? '#ff4444' : '#ccc' }}>
-                  {card.name}
-                  {card.isEchoed && <span style={{ color: '#ffd700', marginLeft: 6, fontSize: 10 }}>ECHO</span>}
-                </div>
-                {card.mods?.mods && card.mods.mods.length > 0 && (
-                  <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
-                    {card.mods.mods.map((m) => {
-                      const modName = m.modId;
-                      return (
-                        <span key={m.modId} style={{ marginRight: 6 }}>
-                          T{m.tier} {modName}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize: 11, color: '#555', marginLeft: 12 }}>
-                {card.type === 'agent' && (
-                  <span>{card.attack ?? 0}/{card.defense ?? 0}</span>
-                )}
-                <span style={{ marginLeft: 8, color: '#00f0ff44' }}>⚡{card.cost}</span>
-              </div>
-            </div>
+              card={card}
+              size="hand"
+            />
           ))}
         </div>
       </div>
