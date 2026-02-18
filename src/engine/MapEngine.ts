@@ -151,6 +151,11 @@ export class MapEngine {
     return false;
   }
 
+  // Swap the active map data (used for zone chunk streaming)
+  setMapData(newMapData: MapData) {
+    this.mapData = newMapData;
+  }
+
   getCamera(): Camera { return { ...this.camera }; }
 
   tileToPixel(tileX: number, tileY: number): { x: number; y: number } {

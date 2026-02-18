@@ -7,6 +7,7 @@ import { useGameStore } from '@/stores/gameStore';
 import { useDeckStore } from '@/stores/deckStore';
 import { CITY_HUB_MAP } from '@/data/cityHubMap';
 import ExplorationView from '@/components/exploration/ExplorationView';
+import ZoneExplorationView from '@/components/zone/ZoneExplorationView';
 import BattleArena from '@/components/battle/BattleArena';
 import DeckBuilder from '@/components/deckbuilder/DeckBuilder';
 import Shop from '@/components/shop/Shop';
@@ -58,20 +59,34 @@ function GlitchTransition({ show }: { show: boolean }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type Screen = 'city_hub' | 'zone_select' | 'battle' | 'shop' | 'deckbuilder' | 'crafting';
+type Screen =
+  | 'city_hub'
+  | 'zone_select'
+  | 'zone_exploration'
+  | 'battle'
+  | 'shop'
+  | 'deckbuilder'
+  | 'crafting';
 
 export default function GamePage() {
   const router = useRouter();
-  const { gameState, setScene, saveGame, markTutorialSeen, enterZone } = useGameStore();
+  const {
+    gameState, activeZone, setScene, saveGame, markTutorialSeen,
+    enterZone, exitZone, collectShard, forgeGridKey,
+    markZoneEnemyDefeated, markZoneCacheLooted, addCredits,
+  } = useGameStore();
   const { setCollection, setDeck } = useDeckStore();
 
   const [screen, setScreen]                         = useState<Screen>('city_hub');
   const [glitchShow, setGlitchShow]                 = useState(false);
   const [pendingBattle, setPendingBattle]           = useState<{ enemyId: string; profileId: string } | null>(null);
+  const [returnScreen, setReturnScreen]             = useState<Screen>('city_hub');
   const [showTutorial, setShowTutorial]             = useState(false);
   const [showDistrictVictory, setShowDistrictVictory] = useState(false);
   const [showSettings, setShowSettings]             = useState(false);
   const [lastBattleResult, setLastBattleResult]     = useState<'win' | 'lose' | null>(null);
+  // Zone battle context
+  const [zoneBattleKey, setZoneBattleKey]           = useState<string | null>(null);
 
   useEffect(() => {
     if (!gameState) router.replace('/');
@@ -88,6 +103,7 @@ export default function GamePage() {
 
   const handleBattleStart = useCallback((enemyId: string, profileId: string) => {
     if (screen === 'battle') return;
+    setReturnScreen(screen as Screen);
     setPendingBattle({ enemyId, profileId });
     setGlitchShow(true);
     setTimeout(() => {
@@ -106,23 +122,35 @@ export default function GamePage() {
     const profileId = pendingBattle?.profileId ?? '';
     setLastBattleResult(result);
 
+    // Zone battle — mark enemy defeated and collect shards
+    if (zoneBattleKey && result === 'win') {
+      markZoneEnemyDefeated(zoneBattleKey);
+      // 15% chance to drop a shard
+      if (Math.random() < 0.15) {
+        collectShard(1);
+      }
+    }
+
     if (result === 'win' && profileId === 'madame_flux') {
       setTimeout(() => {
         setScreen('city_hub');
         setScene('city_hub');
         setPendingBattle(null);
+        setZoneBattleKey(null);
         saveGame();
         setShowDistrictVictory(true);
       }, 300);
     } else {
+      const back = zoneBattleKey ? 'zone_exploration' : 'city_hub';
       setTimeout(() => {
-        setScreen('city_hub');
-        setScene('city_hub');
+        setScreen(back);
+        setScene(back === 'zone_exploration' ? 'zone' : 'city_hub');
         setPendingBattle(null);
+        setZoneBattleKey(null);
         saveGame();
       }, 300);
     }
-  }, [setScene, saveGame, pendingBattle]);
+  }, [setScene, saveGame, pendingBattle, zoneBattleKey, markZoneEnemyDefeated, collectShard]);
 
   const handleBackToHub = useCallback(() => {
     setScreen('city_hub');
@@ -135,16 +163,36 @@ export default function GamePage() {
       setScreen('zone_select');
       return;
     }
-    // Other terminal dialogues are handled inside ExplorationView
   }, []);
 
   const handleEnterZone = useCallback((level: number) => {
     enterZone(level);
-    // Zone exploration will be implemented in FASE 3
-    // For now, show a message and go back
+    setScreen('zone_exploration');
+    setScene('zone');
+  }, [enterZone, setScene]);
+
+  const handleExitZone = useCallback(() => {
+    exitZone();
     setScreen('city_hub');
     setScene('city_hub');
-  }, [enterZone, setScene]);
+  }, [exitZone, setScene]);
+
+  const handleZoneEnemyBattle = useCallback((enemyKey: string, profileSeed: string) => {
+    setZoneBattleKey(enemyKey);
+    // Use profileSeed as the profileId for now; FASE 4 will generate proper enemy profiles
+    handleBattleStart(`zone_enemy_${enemyKey}`, profileSeed);
+  }, [handleBattleStart]);
+
+  const handleZoneCacheLoot = useCallback((cacheKey: string, _cacheSeed: string) => {
+    markZoneCacheLooted(cacheKey);
+    // Give shard + some credits
+    collectShard(1);
+    addCredits(10 + Math.floor(Math.random() * 20));
+  }, [markZoneCacheLooted, collectShard, addCredits]);
+
+  const handleForgeKey = useCallback(() => {
+    forgeGridKey();
+  }, [forgeGridKey]);
 
   const handleTutorialDone = useCallback(() => {
     setShowTutorial(false);
@@ -192,6 +240,21 @@ export default function GamePage() {
           lastBattleResult={lastBattleResult}
         />
       </div>
+
+      {/* Zone Exploration */}
+      {screen === 'zone_exploration' && activeZone && (
+        <div className="absolute inset-0" style={{ zIndex: 15 }}>
+          <ZoneExplorationView
+            zoneConfig={activeZone.config}
+            zoneState={activeZone}
+            onEnemyBattle={handleZoneEnemyBattle}
+            onCacheLoot={handleZoneCacheLoot}
+            onExit={handleExitZone}
+            onForgeKey={handleForgeKey}
+            isActive={screen === 'zone_exploration'}
+          />
+        </div>
+      )}
 
       {/* Zone Select */}
       {screen === 'zone_select' && (
@@ -252,14 +315,14 @@ export default function GamePage() {
         />
       )}
 
-      {/* Settings button (city hub only) */}
-      {screen === 'city_hub' && (
+      {/* Settings button (city hub / zone) */}
+      {(screen === 'city_hub' || screen === 'zone_exploration') && (
         <button
           onClick={() => setShowSettings(true)}
           style={{
             position: 'fixed',
             top: 12,
-            right: 12,
+            right: screen === 'zone_exploration' ? 160 : 12,
             zIndex: 50,
             background: 'rgba(5,5,20,0.8)',
             border: '1px solid rgba(0,240,255,0.25)',

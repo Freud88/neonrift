@@ -22,6 +22,20 @@ export function seededRandom(seed: string): () => number {
   return mulberry32(hashString(seed));
 }
 
-export function seededPick<T>(arr: T[], rng: () => number): T {
+export function seededPick<T>(arr: readonly T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)];
+}
+
+/** Shuffle an array in place using the given RNG (Fisher-Yates). */
+export function seededShuffle<T>(arr: T[], rng: () => number): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Random integer in range [min, max] inclusive. */
+export function seededInt(min: number, max: number, rng: () => number): number {
+  return min + Math.floor(rng() * (max - min + 1));
 }
