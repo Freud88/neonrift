@@ -9,13 +9,9 @@ import { MOD_RARITY_COLOR } from '@/utils/cardMods';
 import { MOD_MAP } from '@/data/mods';
 import CardArt from './CardArt';
 
-// ── Frame PNG: pre-processed (white pixels removed, cropped to bounding box) ──
-// No runtime processing needed — just use the PNG directly
-const frameSrc = '/Cards/Frame Agents.png';
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'T1', 2: 'T2', 3: 'T3' };
-const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#cccccc' };
+const TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#ff6622', 2: '#ffe600', 3: '#aaaaaa' };
 
 type CardSize = 'hand' | 'field' | 'preview' | 'mini';
 
@@ -32,34 +28,20 @@ interface CardComponentProps {
 }
 
 const SIZE_DIMS: Record<CardSize, { w: number; h: number; fontSize: number }> = {
-  hand:    { w: 80,  h: 110, fontSize: 7   },
-  field:   { w: 68,  h: 90,  fontSize: 6.5 },
-  preview: { w: 130, h: 180, fontSize: 10  },
-  mini:    { w: 48,  h: 64,  fontSize: 6   },
+  hand:    { w: 80,  h: 112, fontSize: 6.5 },
+  field:   { w: 68,  h: 95,  fontSize: 6   },
+  preview: { w: 130, h: 182, fontSize: 9   },
+  mini:    { w: 48,  h: 64,  fontSize: 5.5 },
 };
 
-// ── Frame zone proportions (measured from processed frame PNG 988×1328) ───────
-// Name bar:    top 2%–12%    of card height  (dark top section)
-// Artwork:     top 12%–69%   of card height  (transparent window)
-// Text area:   top 69%–85%   of card height  (dark text zone)
-// Stats bar:   top 94%–100%  of card height  (bottom light strip)
-// Cost badge:  top 2%–12%, left 3%–18%
+// ── Card frame built in CSS ───────────────────────────────────────────────────
+// Layout (top→bottom):
+//   Header   : name + cost         ~14% of height
+//   Artwork  : image / canvas      ~38% of height
+//   Body     : mods or description ~38% of height
+//   Footer   : ATK / DEF / type    ~10% of height
 
-const F = {
-  nameTop:    0.02,
-  nameBot:    0.12,
-  artTop:     0.12,
-  artBot:     0.69,
-  textTop:    0.69,
-  textBot:    0.85,
-  statsTop:   0.94,
-  statsBot:   1.00,
-  costLeft:   0.03,
-  costRight:  0.18,
-};
-
-// ── Shared card interior layout (used by both card and hover preview) ─────────
-function CardLayout({
+function CardFrame({
   card,
   inPlay,
   ec,
@@ -67,7 +49,7 @@ function CardLayout({
   w,
   h,
   fontSize,
-  showMods = false,
+  fullDetail = false,   // true → show mod descriptions (hover preview)
 }: {
   card: Card;
   inPlay?: CardInPlay;
@@ -76,7 +58,7 @@ function CardLayout({
   w: number;
   h: number;
   fontSize: number;
-  showMods?: boolean;
+  fullDetail?: boolean;
 }) {
   const isAgent = card.type === 'agent';
   const atk = inPlay?.currentAttack ?? card.attack;
@@ -85,152 +67,173 @@ function CardLayout({
     (inPlay.currentAttack  !== (card.attack  ?? 0)) ||
     (inPlay.currentDefense !== (card.defense ?? 0))
   );
-  const cardMods = card.mods;
-  const modSlots = cardMods?.mods.length ?? 0;
+  const cardMods   = card.mods;
+  const modSlots   = cardMods?.mods.length ?? 0;
+  const accentColor = rarityBorderColor ?? ec.primary;
 
-  // Pixel positions
-  const nameTop    = h * F.nameTop;
-  const nameH      = h * (F.nameBot - F.nameTop);
-  const artTop     = h * F.artTop;
-  const artH       = h * (F.artBot - F.artTop);
-  const textTop    = h * F.textTop;
-  const textH      = h * (F.textBot - F.textTop);
-  const statsTop   = h * F.statsTop;
-  const statsH     = h * (F.statsBot - F.statsTop);
-  const costLeft   = w * F.costLeft;
-  const costW      = w * (F.costRight - F.costLeft);
+  // Zone heights (px)
+  const headerH = Math.round(h * 0.13);
+  const artH    = Math.round(h * 0.37);
+  const bodyH   = Math.round(h * 0.40);
+  const footerH = h - headerH - artH - bodyH;
 
   return (
-    <>
-      {/* ── Artwork behind frame — fills entire card, visible through transparent window */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-        <CardArt card={card} width={w} height={h} />
-      </div>
+    <div style={{ width: w, height: h, display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
-      {/* ── Frame PNG on top of artwork (has transparent window at 12%–69%) */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={frameSrc}
-        alt=""
-        style={{
-          position: 'absolute', inset: 0,
-          width: '100%', height: '100%',
-          objectFit: 'fill',
-          pointerEvents: 'none',
-          zIndex: 2,
-        }}
-      />
-
-      {/* ── Name in top bar */}
+      {/* ── Header ── */}
       <div style={{
-        position: 'absolute', zIndex: 3,
-        top: nameTop,
-        left: w * 0.16, right: w * 0.06,
-        height: nameH,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden',
+        height: headerH,
+        background: `linear-gradient(135deg, ${ec.bg} 0%, #0a0a18 100%)`,
+        borderBottom: `1px solid ${accentColor}55`,
+        display: 'flex',
+        alignItems: 'center',
+        padding: `0 ${Math.round(w * 0.06)}px`,
+        gap: 4,
+        flexShrink: 0,
       }}>
+        {/* Cost bubble */}
+        <div style={{
+          minWidth: Math.max(14, Math.round(w * 0.19)),
+          height: Math.max(14, Math.round(w * 0.19)),
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${accentColor}33 0%, ${ec.bg} 100%)`,
+          border: `1.5px solid ${accentColor}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: Math.max(fontSize + 1, 8),
+            fontWeight: 700,
+            color: accentColor,
+            lineHeight: 1,
+          }}>
+            {card.cost}
+          </span>
+        </div>
+
+        {/* Name */}
         <span style={{
           fontFamily: 'JetBrains Mono, monospace',
-          fontSize: Math.max(fontSize, h * 0.055),
+          fontSize: Math.max(fontSize, 6),
           fontWeight: 700,
-          color: ec.primary,
-          textShadow: `0 0 6px ${ec.primary}88`,
-          whiteSpace: 'nowrap',
+          color: '#e8e8ff',
+          textShadow: `0 0 6px ${accentColor}88`,
+          flex: 1,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          maxWidth: '100%',
-          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          lineHeight: 1.1,
         }}>
           {card.name}
         </span>
       </div>
 
-      {/* ── Cost in top-left esagon zone */}
+      {/* ── Artwork ── */}
       <div style={{
-        position: 'absolute', zIndex: 3,
-        top: nameTop,
-        left: costLeft,
-        width: costW,
-        height: nameH,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: artH,
+        position: 'relative',
+        overflow: 'hidden',
+        borderBottom: `1px solid ${accentColor}33`,
+        flexShrink: 0,
       }}>
-        <span style={{
+        <CardArt card={card} width={w} height={artH} />
+        {/* energy tint overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: `linear-gradient(180deg, transparent 60%, ${ec.bg}cc 100%)`,
+          pointerEvents: 'none',
+        }} />
+        {/* type tag */}
+        <div style={{
+          position: 'absolute', bottom: 3, right: 4,
           fontFamily: 'JetBrains Mono, monospace',
-          fontSize: Math.max(fontSize + 1, h * 0.055),
-          fontWeight: 700,
-          color: ec.primary,
-          lineHeight: 1,
+          fontSize: Math.max(fontSize - 1.5, 5),
+          color: accentColor,
+          opacity: 0.85,
+          background: 'rgba(0,0,0,0.55)',
+          borderRadius: 2,
+          padding: '0 3px',
+          lineHeight: 1.4,
         }}>
-          {card.cost}
-        </span>
+          {TYPE_LABEL[card.type]}
+        </div>
       </div>
 
-      {/* ── Text area (dark zone in frame) — mods if present, else description */}
+      {/* ── Body: mods or description ── */}
       <div style={{
-        position: 'absolute', zIndex: 3,
-        top: textTop, height: textH,
-        left: w * 0.05, right: w * 0.05,
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
+        height: bodyH,
+        background: '#06060f',
+        borderBottom: `1px solid ${accentColor}22`,
+        padding: `${Math.round(bodyH * 0.05)}px ${Math.round(w * 0.07)}px`,
         overflow: 'hidden',
-        paddingTop: 2,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
       }}>
         {cardMods && modSlots > 0 ? (
           <>
-            {/* Rarity label — only in hover (showMods), not on card itself */}
-            {showMods && (
-              <div style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: Math.max(fontSize - 2, 6),
-                color: rarityBorderColor ?? ec.primary,
-                letterSpacing: '0.08em',
-                marginBottom: 2,
-                fontWeight: 700,
-              }}>
-                {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
-              </div>
-            )}
+            {/* Rarity label */}
+            <div style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: Math.max(fontSize - 2, 5),
+              color: accentColor,
+              letterSpacing: '0.07em',
+              fontWeight: 700,
+              marginBottom: 1,
+              flexShrink: 0,
+            }}>
+              {(cardMods.modRarity ?? 'common').toUpperCase()} · {modSlots} MOD{modSlots > 1 ? 'S' : ''}
+            </div>
+
+            {/* Mod list */}
             {cardMods.mods.map((applied, i) => {
               const mod = MOD_MAP[applied.modId];
               if (!mod) return null;
-              const tier = applied.tier as 1 | 2 | 3;
+              const tier   = applied.tier as 1 | 2 | 3;
               const effect = mod.tiers[tier];
               const isPrefix = mod.type === 'prefix';
-              const isBad = effect.isNegative || effect.isUseless;
-              const nameColor = isBad ? '#666677' : isPrefix ? '#00f0ff' : '#c850ff';
-              const descColor = isBad ? '#555566' : '#aaaacc';
+              const isBad    = !!(effect.isNegative || effect.isUseless);
+              const nameColor = isBad ? '#666677' : isPrefix ? '#00e5ff' : '#dd44ff';
+              const badgeColor = isBad ? '#444455' : TIER_COLOR[tier];
+
               return (
-                <div key={i} style={{ marginBottom: showMods ? 2 : 1, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 2 }}>
-                  <span style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: Math.max(fontSize - 2, 5.5),
-                    color: isBad ? '#555' : TIER_COLOR[tier],
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}>
-                    {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
-                  </span>
-                  <span style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: Math.max(fontSize - 2, 5.5),
-                    color: nameColor,
-                    fontWeight: 600,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                  }}>
-                    {mod.name}
-                  </span>
-                  {/* Description only in hover preview */}
-                  {showMods && (
+                <div key={i} style={{ flexShrink: 0, marginBottom: fullDetail ? 3 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {/* tier badge */}
+                    <span style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: Math.max(fontSize - 2, 5),
+                      color: badgeColor,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                      lineHeight: 1.3,
+                    }}>
+                      {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
+                    </span>
+                    {/* mod name */}
+                    <span style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: Math.max(fontSize - 1.5, 5),
+                      color: nameColor,
+                      fontWeight: 600,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1.3,
+                    }}>
+                      {mod.name}
+                    </span>
+                  </div>
+                  {/* description — only in full detail (hover preview) */}
+                  {fullDetail && (
                     <div style={{
                       fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: Math.max(fontSize - 3, 5.5),
-                      color: descColor,
-                      width: '100%',
-                      paddingLeft: 6,
+                      fontSize: Math.max(fontSize - 2.5, 5),
+                      color: isBad ? '#555566' : '#8888aa',
                       lineHeight: 1.3,
+                      paddingLeft: 4,
                     }}>
                       {effect.description}
                     </div>
@@ -242,13 +245,13 @@ function CardLayout({
         ) : (
           <p style={{
             fontFamily: 'JetBrains Mono, monospace',
-            fontSize: Math.max(fontSize - 1, 6),
-            color: '#ccccee',
-            lineHeight: 1.25,
+            fontSize: Math.max(fontSize - 1, 5.5),
+            color: '#aaaacc',
+            lineHeight: 1.3,
             margin: 0,
             overflow: 'hidden',
             display: '-webkit-box',
-            WebkitLineClamp: 3,
+            WebkitLineClamp: fullDetail ? 10 : 4,
             WebkitBoxOrient: 'vertical',
           }}>
             {card.description}
@@ -256,38 +259,43 @@ function CardLayout({
         )}
       </div>
 
-      {/* ── Stats bar at very bottom */}
+      {/* ── Footer: stats ── */}
       <div style={{
-        position: 'absolute', zIndex: 3,
-        top: statsTop, height: statsH,
-        left: 0, right: 0,
-        display: 'flex', alignItems: 'center',
-        paddingLeft: w * 0.05, paddingRight: w * 0.05,
-        gap: w * 0.025,
+        flex: 1,
+        background: `linear-gradient(135deg, #0a0a18 0%, ${ec.bg} 100%)`,
+        borderTop: `1px solid ${accentColor}33`,
+        display: 'flex',
+        alignItems: 'center',
+        padding: `0 ${Math.round(w * 0.06)}px`,
+        gap: Math.round(w * 0.04),
       }}>
         {isAgent && atk !== undefined && def !== undefined ? (
           <>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize, h * 0.05), color: buffed ? '#39ff14' : '#e0e0ff', fontWeight: 700 }}>
-              ⚔ {atk}
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: Math.max(fontSize + 0.5, 7),
+              color: buffed ? '#39ff14' : '#e0e0ff',
+              fontWeight: 700,
+            }}>
+              ⚔{atk}
             </span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize, h * 0.05), color: '#6699ff', fontWeight: 700 }}>
-              🛡 {def}
-            </span>
-            <span style={{ flex: 1 }} />
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 1, 5.5), color: ec.primary, opacity: 0.9 }}>
-              {TYPE_LABEL[card.type]}
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: Math.max(fontSize + 0.5, 7),
+              color: '#5588ff',
+              fontWeight: 700,
+            }}>
+              🛡{def}
             </span>
           </>
         ) : (
-          <>
-            <span style={{ flex: 1 }} />
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 1, 5.5), color: ec.primary, opacity: 0.9 }}>
-              {TYPE_LABEL[card.type]}
-            </span>
-          </>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 1, 5), color: accentColor, opacity: 0.7 }}>
+            {card.effect?.type?.toUpperCase() ?? ''}
+          </span>
         )}
       </div>
-    </>
+
+    </div>
   );
 }
 
@@ -299,7 +307,8 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
   rarityBorderColor: string | null;
 }) {
   const pw = 220;
-  const ph = 308; // same ~2:2.8 ratio as frame
+  const ph = 320;
+  const accentColor = rarityBorderColor ?? ec.primary;
 
   if (typeof document === 'undefined') return null;
 
@@ -314,23 +323,17 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
       zIndex: 9999,
     }}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.85 }}
+        initial={{ opacity: 0, scale: 0.88 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.85 }}
+        exit={{ opacity: 0, scale: 0.88 }}
         transition={{ duration: 0.15 }}
         style={{
-          width: pw,
-          height: ph,
-          position: 'relative',
+          borderRadius: 6,
           overflow: 'hidden',
-          boxShadow: `0 0 40px ${rarityBorderColor ?? ec.primary}, 0 0 80px rgba(0,0,0,0.8)`,
-          borderRadius: 4,
+          boxShadow: `0 0 0 2px ${accentColor}, 0 0 40px ${accentColor}88, 0 0 80px rgba(0,0,0,0.85)`,
         }}
       >
-        {/* Dark bg so frame areas look correct */}
-        <div style={{ position: 'absolute', inset: 0, background: ec.bg, zIndex: 0 }} />
-
-        <CardLayout
+        <CardFrame
           card={card}
           inPlay={inPlay}
           ec={ec}
@@ -338,7 +341,7 @@ function HoverPreview({ card, inPlay, ec, rarityBorderColor }: {
           w={pw}
           h={ph}
           fontSize={10}
-          showMods={true}
+          fullDetail={true}
         />
       </motion.div>
     </div>,
@@ -363,9 +366,10 @@ export default function CardComponent({
   const ec = ENERGY_COLORS[card.energy];
 
   const { w, h, fontSize } = SIZE_DIMS[size];
-  const cardMods = card.mods;
-  const modRarity = cardMods?.modRarity;
+  const cardMods        = card.mods;
+  const modRarity       = cardMods?.modRarity;
   const rarityBorderColor = modRarity && modRarity !== 'common' ? MOD_RARITY_COLOR[modRarity] : null;
+  const accentColor     = rarityBorderColor ?? ec.primary;
 
   const handleMouseEnter = () => {
     hoverTimer.current = setTimeout(() => setHovered(true), 400);
@@ -375,6 +379,38 @@ export default function CardComponent({
     setHovered(false);
   };
 
+  if (size === 'mini') {
+    return (
+      <div style={{
+        width: w, height: h,
+        background: ec.bg,
+        borderRadius: 3,
+        border: `1px solid ${accentColor}66`,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: tapped ? 0.65 : 1,
+        flexShrink: 0,
+      }}
+        onClick={disabled ? undefined : onClick}
+      >
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <CardArt card={card} width={w} height={h - 14} />
+        </div>
+        <div style={{
+          height: 14,
+          background: '#06060f',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0 2px',
+        }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 5.5, color: accentColor, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {card.name}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <motion.div
@@ -382,20 +418,21 @@ export default function CardComponent({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={{
-          width: w,
-          height: h,
-          border: 'none',
-          borderRadius: 4,
-          boxShadow: selected
-            ? `0 0 14px #fff, 0 0 6px ${rarityBorderColor ?? ec.primary}`
-            : attacking
-            ? `0 0 12px #ff4444`
-            : rarityBorderColor
-            ? `0 0 8px ${rarityBorderColor}, 0 0 4px ${ec.glow}`
-            : `0 0 6px ${ec.glow}`,
-          cursor: disabled ? 'default' : 'pointer',
-          position: 'relative',
+          borderRadius: 5,
           overflow: 'hidden',
+          border: selected
+            ? `2px solid #fff`
+            : attacking
+            ? `2px solid #ff4444`
+            : `1px solid ${accentColor}88`,
+          boxShadow: selected
+            ? `0 0 16px #fff8, 0 0 8px ${accentColor}`
+            : attacking
+            ? `0 0 14px #ff4444`
+            : rarityBorderColor
+            ? `0 0 10px ${rarityBorderColor}66`
+            : `0 0 6px ${ec.glow}44`,
+          cursor: disabled ? 'default' : 'pointer',
           userSelect: 'none',
           flexShrink: 0,
           opacity: tapped ? 0.65 : 1,
@@ -406,27 +443,16 @@ export default function CardComponent({
         whileTap={disabled ? {} : { scale: 0.96 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       >
-        {/* Dark bg */}
-        <div style={{ position: 'absolute', inset: 0, background: ec.bg, zIndex: 0 }} />
-
         {faceDown ? (
           <div style={{
-            position: 'absolute', inset: 0, zIndex: 1,
+            width: w, height: h,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'repeating-linear-gradient(45deg, #0a0a1a 0px, #0a0a1a 4px, #111133 4px, #111133 8px)',
           }}>
             <span style={{ color: '#1a1a3a', fontSize: 20 }}>?</span>
           </div>
-        ) : size === 'mini' ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={frameSrc} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none', zIndex: 2 }} />
-            <div style={{ position: 'absolute', zIndex: 3, bottom: 2, left: 2, right: 2, textAlign: 'center' }}>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 5.5, color: ec.primary, fontWeight: 700 }}>{card.name}</span>
-            </div>
-          </>
         ) : (
-          <CardLayout
+          <CardFrame
             card={card}
             inPlay={inPlay}
             ec={ec}
@@ -434,19 +460,27 @@ export default function CardComponent({
             w={w}
             h={h}
             fontSize={fontSize}
-            showMods={false}
+            fullDetail={false}
           />
         )}
 
-        {/* Energy shimmer */}
+        {/* Energy shimmer effects */}
         {!faceDown && card.energy === 'volt' && (
-          <motion.div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(120deg, transparent 0%, rgba(255,240,0,0.06) 40%, transparent 60%)', pointerEvents: 'none', zIndex: 5 }}
+          <motion.div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(120deg, transparent 0%, rgba(255,240,0,0.06) 40%, transparent 60%)',
+            pointerEvents: 'none', zIndex: 10,
+          }}
             animate={{ backgroundPosition: ['-200% 0', '200% 0'] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }}
           />
         )}
         {!faceDown && card.energy === 'cipher' && (
-          <motion.div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 0%, rgba(0,240,255,0.05) 50%, transparent 100%)', pointerEvents: 'none', zIndex: 5 }}
+          <motion.div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0,240,255,0.05) 50%, transparent 100%)',
+            pointerEvents: 'none', zIndex: 10,
+          }}
             animate={{ opacity: [0.4, 1, 0.4] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
           />
