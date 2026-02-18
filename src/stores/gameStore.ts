@@ -139,7 +139,17 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         saved.progress.maxZoneLevel = 1;
         saved.progress.zonesCompleted = 0;
       }
-      set({ gameState: saved, activeZone: null, currentScene: 'city_hub' });
+      // Restore active zone if one was in progress
+      let restoredZone = null;
+      try {
+        const zoneRaw = localStorage.getItem(SAVE_KEY + '_zone');
+        if (zoneRaw) restoredZone = JSON.parse(zoneRaw);
+      } catch { /* ignore */ }
+      set({
+        gameState: saved,
+        activeZone: restoredZone,
+        currentScene: restoredZone ? 'zone' : 'city_hub',
+      });
       return true;
     } catch {
       return false;
@@ -147,9 +157,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   },
 
   saveGame: () => {
-    const { gameState } = get();
+    const { gameState, activeZone } = get();
     if (!gameState) return;
     localStorage.setItem(SAVE_KEY, JSON.stringify(gameState));
+    // Persist active zone separately (so player can resume a zone run)
+    if (activeZone) {
+      localStorage.setItem(SAVE_KEY + '_zone', JSON.stringify(activeZone));
+    } else {
+      localStorage.removeItem(SAVE_KEY + '_zone');
+    }
     set({ hasSave: true });
   },
 

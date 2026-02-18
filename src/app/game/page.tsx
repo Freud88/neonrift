@@ -16,6 +16,7 @@ import Shop from '@/components/shop/Shop';
 import CraftingPanel from '@/components/crafting/CraftingPanel';
 import ZoneSelectScreen from '@/components/zone/ZoneSelectScreen';
 import ZoneVictoryScreen from '@/components/zone/ZoneVictoryScreen';
+import LootCachePopup from '@/components/zone/LootCachePopup';
 import TutorialOverlay from '@/components/ui/TutorialOverlay';
 import DistrictVictory from '@/components/ui/DistrictVictory';
 import SettingsModal from '@/components/ui/SettingsModal';
@@ -94,10 +95,19 @@ export default function GamePage() {
   const [isBossBattle, setIsBossBattle]             = useState(false);
   const [showZoneVictory, setShowZoneVictory]       = useState(false);
   const [defeatedBossName, setDefeatedBossName]     = useState('');
+  const [lootPopup, setLootPopup]                   = useState<{ credits: number; shards: number } | null>(null);
 
   useEffect(() => {
     if (!gameState) router.replace('/');
   }, [gameState, router]);
+
+  // Restore zone exploration screen if an active zone was loaded
+  useEffect(() => {
+    if (activeZone && screen === 'city_hub') {
+      setScreen('zone_exploration');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (gameState) {
@@ -226,9 +236,11 @@ export default function GamePage() {
 
   const handleZoneCacheLoot = useCallback((cacheKey: string, _cacheSeed: string) => {
     markZoneCacheLooted(cacheKey);
-    // Give shard + some credits
-    collectShard(1);
-    addCredits(10 + Math.floor(Math.random() * 20));
+    const creditReward = 10 + Math.floor(Math.random() * 20);
+    const shardReward = 1;
+    collectShard(shardReward);
+    addCredits(creditReward);
+    setLootPopup({ credits: creditReward, shards: shardReward });
   }, [markZoneCacheLooted, collectShard, addCredits]);
 
   const handleForgeKey = useCallback(() => {
@@ -354,6 +366,17 @@ export default function GamePage() {
       {showTutorial && (
         <TutorialOverlay onDone={handleTutorialDone} />
       )}
+
+      {/* Loot cache popup */}
+      <AnimatePresence>
+        {lootPopup && (
+          <LootCachePopup
+            credits={lootPopup.credits}
+            shards={lootPopup.shards}
+            onClose={() => setLootPopup(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Zone victory screen */}
       {showZoneVictory && activeZone && (
