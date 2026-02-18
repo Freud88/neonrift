@@ -458,15 +458,49 @@ function ItemsTab({ inventory, collection, onGetItem, removeCraftingItem }: Item
         break;
       }
       case 'wipe_drive': {
-        // Strip all mods — restore base stats
-        newCard = { ...selectedCard, mods: undefined };
-        msg = `Stripped all mods from ${selectedCard.name}`;
+        const lockedMods = (selectedCard.mods?.mods ?? []).filter(
+          (m) => selectedCard.mods?.locked.includes(m.modId)
+        );
+        if (lockedMods.length > 0) {
+          newCard = {
+            ...selectedCard,
+            mods: {
+              mods: lockedMods,
+              modRarity: rarityFromModCount(lockedMods.length),
+              displayName: selectedCard.mods?.displayName ?? selectedCard.name,
+              locked: selectedCard.mods?.locked ?? [],
+            },
+          };
+          msg = `Wiped unlocked mods — ${lockedMods.length} locked mod${lockedMods.length > 1 ? 's' : ''} preserved`;
+        } else {
+          newCard = { ...selectedCard, mods: undefined };
+          msg = `Stripped all mods from ${selectedCard.name}`;
+        }
         break;
       }
       case 'recompiler': {
-        const count = selectedCard.mods?.mods.length ?? 1;
-        newCard = generateModdedCard({ ...selectedCard, mods: undefined }, count);
-        msg = `Re-rolled ${count} mod${count > 1 ? 's' : ''} on ${newCard.name}`;
+        const allMods = selectedCard.mods?.mods ?? [];
+        const locked = selectedCard.mods?.locked ?? [];
+        const lockedMods = allMods.filter((m) => locked.includes(m.modId));
+        const unlockCount = allMods.length - lockedMods.length;
+        if (unlockCount === 0) {
+          msg = 'All mods are locked — nothing to re-roll!';
+          setResult({ msg });
+          return;
+        }
+        const freshCard = generateModdedCard({ ...selectedCard, mods: undefined }, unlockCount);
+        const freshMods = freshCard.mods?.mods ?? [];
+        const combinedMods = [...lockedMods, ...freshMods];
+        newCard = {
+          ...selectedCard,
+          mods: {
+            mods: combinedMods,
+            modRarity: rarityFromModCount(combinedMods.length),
+            displayName: selectedCard.mods?.displayName ?? selectedCard.name,
+            locked,
+          },
+        };
+        msg = `Re-rolled ${unlockCount} unlocked mod${unlockCount > 1 ? 's' : ''}`;
         break;
       }
       case 'tier_boost': {
