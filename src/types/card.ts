@@ -4,7 +4,7 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type Keyword = 'overclock' | 'decrypt' | 'stealth' | 'armor' | 'regen';
 
 // ── Mod system ────────────────────────────────────────────────────────────────
-export type ModRarity = 'common' | 'coded' | 'enhanced' | 'overclocked' | 'corrupted';
+export type ModRarity = 'common' | 'coded' | 'enhanced' | 'overclocked' | 'corrupted' | 'mythic';
 
 export interface AppliedMod {
   modId: string;    // references MODS[id]
@@ -13,7 +13,7 @@ export interface AppliedMod {
 
 // A card that has been randomized with mods. All optional so base cards still work.
 export interface CardMods {
-  mods: AppliedMod[];           // 0–4 mods (max 2 prefix + 2 suffix)
+  mods: AppliedMod[];           // 0–6 mods (max 3 prefix + 3 suffix)
   modRarity: ModRarity;
   displayName: string;          // e.g. "Ionized Shock Trooper of Stealth"
   locked: string[];             // modIds locked by Quantum Lock

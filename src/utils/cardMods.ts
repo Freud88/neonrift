@@ -9,8 +9,9 @@ export function rarityFromModCount(count: number): ModRarity {
   if (count === 0) return 'common';
   if (count === 1) return 'coded';
   if (count === 2) return 'enhanced';
-  if (count === 3) return 'overclocked';
-  return 'corrupted';
+  if (count <= 4)  return 'overclocked';
+  if (count === 5) return 'corrupted';
+  return 'mythic';  // 6 mods
 }
 
 export const MOD_RARITY_COLOR: Record<ModRarity, string> = {
@@ -18,7 +19,8 @@ export const MOD_RARITY_COLOR: Record<ModRarity, string> = {
   coded:       '#cccccc',
   enhanced:    '#4488ff',
   overclocked: '#ffe600',
-  corrupted:   '#ff6622',
+  corrupted:   '#ff8c00',
+  mythic:      '#ff2222',
 };
 
 // ── Tier roll (60% T3, 30% T2, 10% T1) ──────────────────────────────────────
@@ -64,28 +66,23 @@ function pickMods(card: Card, count: number): AppliedMod[] {
     }
   };
 
-  // Fill up to count, alternating prefix/suffix or filling available slots
+  // Fill up to count, max 3 prefix + 3 suffix
+  const MAX_PER_TYPE = 3;
   let prefixCount = 0;
   let suffixCount = 0;
   for (let i = 0; i < count; i++) {
-    if (prefixCount < 2 && suffixCount < 2) {
-      // Alternate or pick randomly
-      if (Math.random() < 0.5 && prefixes.length > 0) {
-        pick(prefixes, 2);
-        prefixCount++;
-      } else if (suffixes.length > 0) {
-        pick(suffixes, 2);
-        suffixCount++;
+    const canPrefix = prefixCount < MAX_PER_TYPE && prefixes.length > 0;
+    const canSuffix = suffixCount < MAX_PER_TYPE && suffixes.length > 0;
+    if (canPrefix && canSuffix) {
+      if (Math.random() < 0.5) {
+        pick(prefixes, MAX_PER_TYPE); prefixCount++;
       } else {
-        pick(prefixes, 2);
-        prefixCount++;
+        pick(suffixes, MAX_PER_TYPE); suffixCount++;
       }
-    } else if (prefixCount < 2) {
-      pick(prefixes, 2);
-      prefixCount++;
-    } else {
-      pick(suffixes, 2);
-      suffixCount++;
+    } else if (canPrefix) {
+      pick(prefixes, MAX_PER_TYPE); prefixCount++;
+    } else if (canSuffix) {
+      pick(suffixes, MAX_PER_TYPE); suffixCount++;
     }
   }
 
@@ -161,7 +158,7 @@ export function withRandomArt(card: Card): Card {
 export function generateModdedCard(baseCard: Card, modCount: number): Card {
   if (modCount === 0) return { ...baseCard, artIndex: Math.floor(Math.random() * 1000) };
 
-  const clampedCount = Math.min(4, Math.max(0, modCount));
+  const clampedCount = Math.min(6, Math.max(0, modCount));
   const mods = pickMods(baseCard, clampedCount);
 
   // Deterministic unique id: baseCard.id + sorted mod fingerprint
@@ -196,8 +193,9 @@ export function generateModdedCard(baseCard: Card, modCount: number): Card {
 // ── Helper: how many mods to generate based on enemy difficulty ───────────────
 
 export function modCountForDifficulty(difficulty: number, isBoss: boolean): number {
-  if (isBoss) return 2 + Math.floor(Math.random() * 2);  // 2–3
-  if (difficulty >= 3) return 1 + Math.floor(Math.random() * 2); // 1–2
+  if (isBoss) return 3 + Math.floor(Math.random() * 4);   // 3–6
+  if (difficulty >= 4) return 3 + Math.floor(Math.random() * 3); // 3–5
+  if (difficulty >= 3) return 1 + Math.floor(Math.random() * 3); // 1–3
   if (difficulty >= 2) return Math.random() < 0.5 ? 1 : 0;       // 0–1
   return 0; // difficulty 1: no mods
 }

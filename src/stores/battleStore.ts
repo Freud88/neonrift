@@ -23,7 +23,8 @@ interface BattleStoreState {
   enemyProfileId: string;
   lastEvents: AttackEvent[];
   damageNumbers: DamageNumber[];
-  selectedCardId: string | null;   // card highlighted in hand
+  selectedCardId: string | null;     // card highlighted in hand
+  pendingAttackerId: string | null;  // player agent selected to attack (waiting for target)
   isAnimating: boolean;
   pendingEnemyCard: CardInPlay | null;   // card enemy just played — waiting for player ack
 
@@ -33,6 +34,13 @@ interface BattleStoreState {
   acceptHand: () => void;
   selectCard: (instanceId: string | null) => void;
   playCard: (instanceId: string, targetId?: string) => boolean;
+  /** Select a player agent as the attacker (first click) */
+  selectAttacker: (instanceId: string | null) => void;
+  /** Attack a specific enemy agent with the selected attacker */
+  attackVsAgent: (targetInstanceId: string) => Promise<void>;
+  /** Attack the enemy player directly with the selected attacker */
+  attackVsPlayer: () => Promise<void>;
+  // Legacy
   declareAttacker: (instanceId: string) => void;
   confirmAttack: () => Promise<void>;
   endPlayerTurn: () => Promise<void>;
@@ -49,6 +57,7 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
   lastEvents: [],
   damageNumbers: [],
   selectedCardId: null,
+  pendingAttackerId: null,
   isAnimating: false,
   pendingEnemyCard: null,
 
@@ -102,6 +111,43 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       });
     }
     return ok;
+  },
+
+  selectAttacker: (instanceId) => {
+    const { engine } = get();
+    if (!engine || !instanceId) { set({ pendingAttackerId: null }); return; }
+    // Verify agent can attack
+    if (engine.canAttack(instanceId)) {
+      set({ pendingAttackerId: instanceId });
+    } else {
+      set({ pendingAttackerId: null });
+    }
+  },
+
+  attackVsAgent: async (targetInstanceId) => {
+    const { engine, pendingAttackerId } = get();
+    if (!engine || !pendingAttackerId) return;
+    set({ isAnimating: true });
+
+    const event = engine.attackAgentVsAgent(pendingAttackerId, targetInstanceId);
+    const events = event ? [event] : [];
+    set({ battleState: { ...engine.getState() }, lastEvents: events, pendingAttackerId: null });
+
+    await _delay(600);
+    set({ isAnimating: false, lastEvents: [] });
+  },
+
+  attackVsPlayer: async () => {
+    const { engine, pendingAttackerId } = get();
+    if (!engine || !pendingAttackerId) return;
+    set({ isAnimating: true });
+
+    const event = engine.attackAgentVsPlayer(pendingAttackerId);
+    const events = event ? [event] : [];
+    set({ battleState: { ...engine.getState() }, lastEvents: events, pendingAttackerId: null });
+
+    await _delay(600);
+    set({ isAnimating: false, lastEvents: [] });
   },
 
   declareAttacker: (instanceId) => {
@@ -192,6 +238,7 @@ export const useBattleStore = create<BattleStoreState>((set, get) => ({
       lastEvents: [],
       damageNumbers: [],
       selectedCardId: null,
+      pendingAttackerId: null,
       isAnimating: false,
       pendingEnemyCard: null,
     }),

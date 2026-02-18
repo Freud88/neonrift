@@ -191,11 +191,18 @@ function CardLayout({
               const mod = MOD_MAP[applied.modId];
               if (!mod) return null;
               const tier = applied.tier as 1 | 2 | 3;
+              const effect = mod.tiers[tier];
+              const isPrefix = mod.type === 'prefix';
+              const isBad = effect.isNegative || effect.isUseless;
+              const nameColor = isBad ? '#666677' : isPrefix ? '#00f0ff' : '#c850ff';
+              const descColor = isBad ? '#555566' : '#8888aa';
               return (
                 <div key={i} style={{ marginBottom: 1 }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: TIER_COLOR[tier], fontWeight: 700, marginRight: 3 }}>{TIER_LABEL[tier]}</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: '#e0e0ff' }}>{mod.name}</span>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 3, 5.5), color: '#8888aa', marginLeft: 6 }}>{mod.tiers[tier].description}</div>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: isBad ? '#555' : TIER_COLOR[tier], fontWeight: 700, marginRight: 3 }}>
+                    {isBad ? '⚠' : ''}{TIER_LABEL[tier]}
+                  </span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 2, 6), color: nameColor }}>{mod.name}</span>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: Math.max(fontSize - 3, 5.5), color: descColor, marginLeft: 6 }}>{effect.description}</div>
                 </div>
               );
             })}

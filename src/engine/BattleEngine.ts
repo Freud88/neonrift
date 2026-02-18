@@ -465,34 +465,129 @@ export class BattleEngine {
     }
   }
 
-  // ── Combat ───────────────────────────────────────────────────────────────────
+  // ── Shield calculation ────────────────────────────────────────────────────────
 
+  /** Sum of DEF of all living Agents on a side — used to reduce direct player damage */
+  calculateShield(side: 'player' | 'enemy'): number {
+    const combatant = side === 'player' ? this.state.player : this.state.enemy;
+    return combatant.field
+      .filter((c) => c.card.type === 'agent' && c.currentDefense > 0)
+      .reduce((sum, c) => sum + c.currentDefense, 0);
+  }
+
+  // ── Combat — Player chooses target per attacker ───────────────────────────────
+
+  /** Returns true if the given player agent can attack this turn */
+  canAttack(instanceId: string): boolean {
+    const attacker = this.state.player.field.find((c) => c.instanceId === instanceId);
+    if (!attacker || attacker.card.type !== 'agent') return false;
+    if (attacker.tapped) return false;
+    if (attacker.summonedThisTurn && !attacker.card.keywords?.some((k) => k.keyword === 'overclock')) return false;
+    return true;
+  }
+
+  /** Player agent attacks a specific enemy agent (agent vs agent) */
+  attackAgentVsAgent(attackerInstanceId: string, targetInstanceId: string): AttackEvent | null {
+    const player = this.state.player;
+    const enemy  = this.state.enemy;
+
+    const attacker = player.field.find((c) => c.instanceId === attackerInstanceId);
+    const defender = enemy.field.find((c) => c.instanceId === targetInstanceId);
+
+    if (!attacker || !defender) return null;
+    if (!this.canAttack(attackerInstanceId)) return null;
+    if (defender.card.type !== 'agent') return null;
+
+    attacker.tapped = true;
+
+    // Both deal damage simultaneously
+    const attackerDmg = attacker.currentAttack;
+    const defenderDmg = defender.currentAttack;
+
+    const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
+    const defenderArmor = defender.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
+
+    this._dealDamageToAgent(defender, enemy,  Math.max(0, attackerDmg - defenderArmor), attacker, player);
+    this._dealDamageToAgent(attacker, player, Math.max(0, defenderDmg - attackerArmor));
+
+    // Corrode
+    const corrode = getCorrodeValue(attacker);
+    if (corrode.atk > 0 || corrode.def > 0) {
+      const stillAlive = enemy.field.find((c) => c.instanceId === defender.instanceId);
+      if (stillAlive) {
+        stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
+        stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+      }
+    }
+
+    this._log(`${attacker.card.name} attacks ${defender.card.name}`);
+    this._checkWinCondition();
+
+    return { type: 'combat', attacker, blocker: defender, attackerDmg, blockerDmg: defenderDmg, target: 'agent' };
+  }
+
+  /** Player agent attacks the enemy player directly (shield reduces damage) */
+  attackAgentVsPlayer(attackerInstanceId: string): AttackEvent | null {
+    const player = this.state.player;
+    const enemy  = this.state.enemy;
+
+    const attacker = player.field.find((c) => c.instanceId === attackerInstanceId);
+    if (!attacker) return null;
+    if (!this.canAttack(attackerInstanceId)) return null;
+
+    attacker.tapped = true;
+
+    const rawDmg = attacker.currentAttack;
+
+    // Phasing mod: bypass some or all shield
+    let shieldBypass = 0;
+    for (const applied of attacker.card.mods?.mods ?? []) {
+      const mod = MOD_MAP[applied.modId];
+      const sp = mod?.tiers[applied.tier]?.special ?? '';
+      if (sp === 'phasing_3') shieldBypass = 0.3;
+      if (sp === 'phasing_2') shieldBypass = 0.5;
+      if (sp === 'phasing_1') shieldBypass = 1.0;
+    }
+
+    const shield = this.calculateShield('enemy');
+    const effectiveShield = Math.round(shield * (1 - shieldBypass));
+    const effectiveDmg = Math.max(0, rawDmg - effectiveShield);
+
+    enemy.health -= effectiveDmg;
+    this._log(`${attacker.card.name} attacks player directly: ${rawDmg} - ${effectiveShield} shield = ${effectiveDmg} damage`);
+
+    // Drain: heal on direct player damage
+    const drain = getDrainValue(attacker);
+    if (drain > 0) {
+      player.health = Math.min(player.maxHealth, player.health + drain);
+      this._log(`${attacker.card.name} drains ${drain} life!`);
+    }
+
+    this._checkWinCondition();
+    return { type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: rawDmg - effectiveDmg, target: 'player' };
+  }
+
+  // Keep declareAttacker for backward compat (battleStore legacy path)
   declareAttacker(instanceId: string) {
     const attacker = this.state.player.field.find((c) => c.instanceId === instanceId);
     if (!attacker || attacker.card.type !== 'agent') return;
     if (attacker.tapped) return;
     if (attacker.summonedThisTurn && !attacker.card.keywords?.some((k) => k.keyword === 'overclock')) return;
-
     const already = this.state.attackers.indexOf(instanceId);
-    if (already !== -1) {
-      this.state.attackers.splice(already, 1);
-    } else {
-      this.state.attackers.push(instanceId);
-    }
+    if (already !== -1) this.state.attackers.splice(already, 1);
+    else this.state.attackers.push(instanceId);
   }
 
-  // Enemy AI calls this to block
   declareBlocker(attackerId: string, blockerId: string | null) {
-    if (blockerId === null) {
-      delete this.state.blockers[attackerId];
-    } else {
+    if (blockerId === null) delete this.state.blockers[attackerId];
+    else {
       const blocker = this.state.enemy.field.find((c) => c.instanceId === blockerId);
       if (!blocker || blocker.card.type !== 'agent') return;
-      if (blocker.stealthTurns > 0) return; // can't block stealth... wait, stealth is for attackers
       this.state.blockers[attackerId] = blockerId;
     }
   }
 
+  // Legacy resolveAttacks (kept for compatibility; new UI uses attackAgentVs*)
   resolveAttacks(): { events: AttackEvent[] } {
     const events: AttackEvent[] = [];
     const player = this.state.player;
@@ -501,109 +596,101 @@ export class BattleEngine {
     for (const attackerId of this.state.attackers) {
       const attacker = player.field.find((c) => c.instanceId === attackerId);
       if (!attacker) continue;
-
       attacker.tapped = true;
       const blockerId = this.state.blockers[attackerId];
       const blocker = blockerId ? enemy.field.find((c) => c.instanceId === blockerId) : undefined;
 
       if (blocker) {
-        // Combat: both deal damage simultaneously
         const attackerDmg = attacker.currentAttack;
         const blockerDmg  = blocker.currentAttack;
-
-        // Armor reduction
         const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
         const blockerArmor  = blocker.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
-
         this._dealDamageToAgent(blocker,  enemy,  Math.max(0, attackerDmg - blockerArmor), attacker, player);
         this._dealDamageToAgent(attacker, player, Math.max(0, blockerDmg  - attackerArmor));
-
-        // Corrode: reduce blocker's stats permanently on attack
         const corrode = getCorrodeValue(attacker);
         if (corrode.atk > 0 || corrode.def > 0) {
-          // blocker may have been removed; only apply if still on field
           const stillAlive = enemy.field.find((c) => c.instanceId === blocker.instanceId);
           if (stillAlive) {
             stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
             stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
           }
         }
-
-        events.push({ type: 'combat', attacker, blocker, attackerDmg, blockerDmg });
+        events.push({ type: 'combat', attacker, blocker, attackerDmg, blockerDmg, target: 'agent' });
       } else {
-        // Check stealth on attacker: already handled (stealth = can't be blocked)
-        const dmg = attacker.currentAttack;
-        enemy.health -= dmg;
-        events.push({ type: 'direct', attacker, damage: dmg });
-        this._log(`${attacker.card.name} deals ${dmg} direct damage!`);
-
-        // Drain: heal player on direct damage
+        const shield = this.calculateShield('enemy');
+        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        enemy.health -= effectiveDmg;
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
         const drain = getDrainValue(attacker);
-        if (drain > 0) {
-          player.health = Math.min(player.maxHealth, player.health + drain);
-          this._log(`${attacker.card.name} drains ${drain} life!`);
-        }
+        if (drain > 0) player.health = Math.min(player.maxHealth, player.health + drain);
       }
     }
-
     this.state.attackers = [];
     this.state.blockers  = {};
     this._checkWinCondition();
     return { events };
   }
 
-  // Enemy attacks
+  // Enemy AI attacks — uses shield system for direct damage to player
   resolveEnemyAttacks(): { events: AttackEvent[] } {
     const events: AttackEvent[] = [];
     const enemy  = this.state.enemy;
     const player = this.state.player;
 
-    for (const attacker of enemy.field) {
+    for (const attacker of [...enemy.field]) {
       if (attacker.card.type !== 'agent' || attacker.tapped || attacker.summonedThisTurn) continue;
-
       attacker.tapped = true;
 
-      // Player can't choose blockers in MVP — AI chooses for player
-      // Simple: find weakest player agent that can trade
-      const canBlock = player.field.filter(
-        (c) => c.card.type === 'agent' && !c.tapped && c.stealthTurns === 0
-      );
-
-      // Stealth check on attacker
+      // Stealth: can't be targeted
       if (attacker.stealthTurns > 0) {
-        // Can't be blocked
-        player.health -= attacker.currentAttack;
-        events.push({ type: 'direct', attacker, damage: attacker.currentAttack });
+        const shield = this.calculateShield('player');
+        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        player.health -= effectiveDmg;
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
+        const drain = getDrainValue(attacker);
+        if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
         continue;
       }
 
-      const blocker = canBlock.length > 0
-        ? canBlock.reduce((best, c) =>
-            c.currentDefense < best.currentDefense ? c : best, canBlock[0])
-        : null;
+      // AI decision: attack weakest player agent that would die, otherwise go direct
+      const canAttack = player.field.filter(
+        (c) => c.card.type === 'agent' && c.currentDefense > 0
+      );
 
-      if (blocker && player.field.length > 0) {
-        // Blocker choice: only block if it survives or kills attacker
-        const blockerSurvives = blocker.currentDefense > attacker.currentAttack;
-        const attackerDies    = attacker.currentDefense <= blocker.currentAttack;
-        if (blockerSurvives || attackerDies) {
-          this._dealDamageToAgent(blocker, player, attacker.currentAttack);
-          this._dealDamageToAgent(attacker, enemy, blocker.currentAttack);
-          events.push({ type: 'combat', attacker, blocker, attackerDmg: attacker.currentAttack, blockerDmg: blocker.currentAttack });
-        } else {
-          // Don't block — take direct
-          player.health -= attacker.currentAttack;
-          events.push({ type: 'direct', attacker, damage: attacker.currentAttack });
+      // Find player agent attacker can kill (profitable trade)
+      const killTarget = canAttack.find(
+        (c) => c.currentDefense <= attacker.currentAttack && c.currentAttack < attacker.currentDefense
+      );
+      // Otherwise any agent it can destroy
+      const anyKill = canAttack.find((c) => c.currentDefense <= attacker.currentAttack);
+      const target = killTarget ?? anyKill ?? null;
+
+      if (target) {
+        // Agent vs agent
+        const attackerDmg = attacker.currentAttack;
+        const defenderDmg = target.currentAttack;
+        const attackerArmor = attacker.card.keywords?.find((k) => k.keyword === 'armor')?.value ?? 0;
+        const defenderArmor = target.card.keywords?.find((k) => k.keyword === 'armor')?.value  ?? 0;
+        this._dealDamageToAgent(target,   player, Math.max(0, attackerDmg - defenderArmor), attacker, enemy);
+        this._dealDamageToAgent(attacker, enemy,  Math.max(0, defenderDmg - attackerArmor));
+        const corrode = getCorrodeValue(attacker);
+        if (corrode.atk > 0 || corrode.def > 0) {
+          const stillAlive = player.field.find((c) => c.instanceId === target.instanceId);
+          if (stillAlive) {
+            stillAlive.currentAttack  = Math.max(0, stillAlive.currentAttack  - corrode.atk);
+            stillAlive.currentDefense = Math.max(1, stillAlive.currentDefense - corrode.def);
+          }
         }
+        events.push({ type: 'combat', attacker, blocker: target, attackerDmg, blockerDmg: defenderDmg, target: 'agent' });
       } else {
-        player.health -= attacker.currentAttack;
-        events.push({ type: 'direct', attacker, damage: attacker.currentAttack });
-        this._log(`Enemy ${attacker.card.name} deals ${attacker.currentAttack} direct!`);
-        // Enemy drain: heal enemy on direct hit
+        // Attack player directly — shield reduces damage
+        const shield = this.calculateShield('player');
+        const effectiveDmg = Math.max(0, attacker.currentAttack - shield);
+        player.health -= effectiveDmg;
+        events.push({ type: 'direct', attacker, damage: effectiveDmg, damageAbsorbed: attacker.currentAttack - effectiveDmg, target: 'player' });
+        this._log(`Enemy ${attacker.card.name} attacks player: ${attacker.currentAttack} - ${shield} shield = ${effectiveDmg}`);
         const drain = getDrainValue(attacker);
-        if (drain > 0) {
-          enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
-        }
+        if (drain > 0) enemy.health = Math.min(enemy.maxHealth, enemy.health + drain);
       }
     }
 
@@ -728,9 +815,11 @@ export class BattleEngine {
 
 export interface AttackEvent {
   type: 'combat' | 'direct';
+  target: 'agent' | 'player';
   attacker: CardInPlay;
-  blocker?: CardInPlay;
+  blocker?: CardInPlay;      // defender agent (when target='agent')
   attackerDmg?: number;
   blockerDmg?: number;
-  damage?: number;
+  damage?: number;           // effective damage dealt (when target='player')
+  damageAbsorbed?: number;   // damage absorbed by shield
 }
