@@ -161,8 +161,9 @@ export const MODS: Mod[] = [
   },
   {
     id: 'P15', name: 'Layered', type: 'prefix', applicableTo: ['trap'], weight: 60,
-    tiers: build(nt(2, 99), v => ({
-      description: v >= 99 ? 'Triggers every time (permanent)' : `Triggers ${v} times`,
+    // T1–T4: +1 extra trigger, T5–T7: +2, T8–T10: +3
+    tiers: build([1,1,1,1,2,2,2,3,3,3], (v) => ({
+      description: `Triggers ${v + 1}x total (+${v} extra)`,
       special: 'layered', specialValue: v,
     })),
   },

@@ -67,4 +67,6 @@ export interface CardInPlay {
   stealthTurns: number;     // turns remaining with stealth
   summonedThisTurn: boolean;
   buffs: { attack: number; defense: number; source: string }[];
+  /** Remaining extra triggers from Layered mod (undefined = not layered) */
+  layeredCharges?: number;
 }

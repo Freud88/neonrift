@@ -506,12 +506,17 @@ export class BattleEngine {
   ) {
     for (let i = trapOwner.traps.length - 1; i >= 0; i--) {
       const trap = trapOwner.traps[i];
-      if (trap.card.triggerCondition === trigger) {
-        trapOwner.traps.splice(i, 1);
-        trapOwner.discard.push(trap.card);
-        // Resolve trap effect
-        const effect = trap.card.effect;
-        if (!effect) continue;
+      if (trap.card.triggerCondition !== trigger) continue;
+
+      // Initialize layeredCharges on first trigger if the trap has the Layered mod
+      if (trap.layeredCharges === undefined) {
+        const extraTriggers = getSpecialValue(trap, 'layered');
+        trap.layeredCharges = extraTriggers; // 0 = no extra triggers (normal), 1/2/3 = extra
+      }
+
+      // Resolve trap effect
+      const effect = trap.card.effect;
+      if (effect) {
         if (effect.type === 'damage') {
           if (trigger === 'on_play_agent') {
             this._dealDamageToAgent(triggeringCard,
@@ -520,11 +525,19 @@ export class BattleEngine {
             );
           }
         } else if (effect.type === 'counter') {
-          // Cancel the triggering script — remove from field/discard
           const opp = trapOwner === this.state.player ? this.state.enemy : this.state.player;
-          opp.discard.pop(); // remove the just-played script
+          opp.discard.pop();
           this._log(`Trap: ${trap.card.name} countered ${triggeringCard.card.name}!`);
         }
+      }
+
+      // Consume one charge or remove the trap
+      if (trap.layeredCharges > 0) {
+        trap.layeredCharges--;
+        this._log(`Trap triggered: ${trap.card.name} (${trap.layeredCharges} extra trigger${trap.layeredCharges !== 1 ? 's' : ''} left)`);
+      } else {
+        trapOwner.traps.splice(i, 1);
+        trapOwner.discard.push(trap.card);
         this._log(`Trap triggered: ${trap.card.name}`);
       }
     }
