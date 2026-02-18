@@ -1,6 +1,9 @@
 import type { Card } from './card';
 
-export type GameScene = 'title' | 'exploration' | 'battle' | 'battle_rewards' | 'shop' | 'deckbuilder' | 'dialogue';
+export type GameScene =
+  | 'title' | 'exploration' | 'battle' | 'battle_rewards'
+  | 'shop' | 'deckbuilder' | 'dialogue'
+  | 'city_hub' | 'zone_select' | 'zone';
 
 // ── Crafting items ────────────────────────────────────────────────────────────
 export type CraftingItemId =
@@ -39,6 +42,8 @@ export interface GameProgress {
   totalWins: number;
   totalLosses: number;
   tutorialSeen: boolean;
+  maxZoneLevel: number;      // highest unlocked zone (starts at 1)
+  zonesCompleted: number;    // total boss kills across all zones
 }
 
 export interface GameSettings {

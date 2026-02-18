@@ -43,4 +43,47 @@ export const DIALOGUES: Record<string, Dialogue> = {
       "WARNING: Do not engage without a fast counter-strategy.",
     ],
   },
+
+  // ── City Hub dialogues ──────────────────────────────────────────────────────
+  deck_terminal: {
+    id: 'deck_terminal',
+    speaker: 'DECK BUILDER',
+    lines: [
+      "[DECK BUILDER v3.1 — Online]",
+      "Manage your combat deck here. Add, remove, or reorder cards.",
+    ],
+  },
+  quest_board: {
+    id: 'quest_board',
+    speaker: 'Nexus',
+    lines: [
+      "The quest board flickers with static. No active contracts yet.",
+      "Check back later, Drifter. The Grid always needs fixers.",
+    ],
+  },
+  story_gate: {
+    id: 'story_gate',
+    speaker: 'TERMINAL',
+    lines: [
+      "[STORY GATE — ACCESS RESTRICTED]",
+      "Campaign mode is still being compiled. Check back after the next patch.",
+    ],
+  },
+  zone_portal: {
+    id: 'zone_portal',
+    speaker: 'GRID PORTAL',
+    lines: [
+      "[GRID PORTAL — ACTIVE]",
+      "Step into the Rift. Collect Key Shards. Forge the Grid Key. Face the Boss.",
+      "Each level deeper, the Grid fights back harder.",
+    ],
+  },
+  stash_terminal: {
+    id: 'stash_terminal',
+    speaker: 'TERMINAL',
+    lines: [
+      "[STASH — OFFLINE]",
+      "Card storage system is undergoing maintenance. Come back later.",
+    ],
+  },
 };

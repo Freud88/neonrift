@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { MapEngine, type SpriteEntity } from '@/engine/MapEngine';
-import { NEON_ROW_MAP } from '@/data/maps';
+import type { MapData } from '@/data/maps';
 import { ENEMIES } from '@/data/enemies';
 
 const TILE_SIZE = 32;
@@ -30,6 +30,7 @@ export interface ExplorationCallbacks {
 
 export function useExploration(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  mapData: MapData,
   defeatedEnemies: string[],
   callbacks: ExplorationCallbacks,
   joystick: { x: number; y: number },   // normalized -1..1 from virtual joystick
@@ -50,8 +51,12 @@ export function useExploration(
   const CONTACT_COOLDOWN = 5000;
 
   // ── Build initial entities from map data ──────────────────────────────────
+  // Keep mapData ref in sync for RAF loop access
+  const mapDataRef = useRef<MapData>(mapData);
+  mapDataRef.current = mapData;
+
   const buildEntities = useCallback((): SpriteEntity[] => {
-    const map = NEON_ROW_MAP;
+    const map = mapData;
     const entities: SpriteEntity[] = [];
 
     // Player
@@ -148,7 +153,7 @@ export function useExploration(
     }
 
     return entities;
-  }, [defeatedEnemies]);
+  }, [mapData, defeatedEnemies]);
 
   // ── Input ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -174,7 +179,7 @@ export function useExploration(
     resize();
     window.addEventListener('resize', resize);
 
-    const engine = new MapEngine(canvas, NEON_ROW_MAP);
+    const engine = new MapEngine(canvas, mapData);
     engineRef.current = engine;
     entitiesRef.current = buildEntities();
 
@@ -235,7 +240,7 @@ export function useExploration(
           e.wanderTimer = (e.wanderTimer ?? 0) - 1;
           if ((e.wanderTimer ?? 0) <= 0 || !e.wanderTarget) {
             // Pick new wander target near spawn
-            const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
+            const mapObj = mapDataRef.current.objects.find((o) => o.id === e.id);
             if (mapObj) {
               const spawnPx = mapObj.tile.x * TILE_SIZE + TILE_SIZE / 2;
               const spawnPy = mapObj.tile.y * TILE_SIZE + TILE_SIZE / 2;
@@ -278,7 +283,7 @@ export function useExploration(
           const contactRange = player.radius + e.radius;
           if (dist < contactRange && now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
-            const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
+            const mapObj = mapDataRef.current.objects.find((o) => o.id === e.id);
             if (mapObj?.enemyProfileId) {
               callbacksRef.current.onEnemyContact(e.id, mapObj.enemyProfileId);
             }
@@ -286,7 +291,7 @@ export function useExploration(
         } else if (e.type === 'npc' && dist < INTERACTION_RANGE) {
           if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
-            const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
+            const mapObj = mapDataRef.current.objects.find((o) => o.id === e.id);
             if (mapObj?.npcId && mapObj.dialogueId) {
               callbacksRef.current.onNPCContact(mapObj.npcId, mapObj.dialogueId);
             }
@@ -299,7 +304,7 @@ export function useExploration(
         } else if (e.type === 'boss_gate' && dist < INTERACTION_RANGE) {
           if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
-            const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
+            const mapObj = mapDataRef.current.objects.find((o) => o.id === e.id);
             callbacksRef.current.onBossGateContact(
               mapObj?.enemyProfileId ?? 'madame_flux',
               mapObj?.requiredKills ?? 3
@@ -308,7 +313,7 @@ export function useExploration(
         } else if (e.type === 'terminal' && dist < INTERACTION_RANGE) {
           if (now - lastInteraction.current > CONTACT_COOLDOWN) {
             lastInteraction.current = now;
-            const mapObj = NEON_ROW_MAP.objects.find((o) => o.id === e.id);
+            const mapObj = mapDataRef.current.objects.find((o) => o.id === e.id);
             if (mapObj?.dialogueId) {
               callbacksRef.current.onTerminalContact(mapObj.dialogueId);
             }
@@ -330,7 +335,7 @@ export function useExploration(
       window.removeEventListener('resize', resize);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasRef, buildEntities]);
+  }, [canvasRef, mapData, buildEntities]);
 
   // Expose method to mark enemy as defeated on the canvas
   const markEnemyDefeated = useCallback((enemyId: string) => {
@@ -348,8 +353,9 @@ export function useExploration(
   const teleportToSpawn = useCallback(() => {
     const player = entitiesRef.current.find((e) => e.id === 'player');
     if (player) {
-      player.x = NEON_ROW_MAP.playerSpawn.x * TILE_SIZE + TILE_SIZE / 2;
-      player.y = NEON_ROW_MAP.playerSpawn.y * TILE_SIZE + TILE_SIZE / 2;
+      const spawn = mapDataRef.current.playerSpawn;
+      player.x = spawn.x * TILE_SIZE + TILE_SIZE / 2;
+      player.y = spawn.y * TILE_SIZE + TILE_SIZE / 2;
     }
     lastInteraction.current = 0;
   }, []);

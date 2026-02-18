@@ -5,25 +5,30 @@ import { useGameStore } from '@/stores/gameStore';
 import { useExploration } from '@/hooks/useExploration';
 import { DIALOGUES } from '@/data/dialogues';
 import { ENEMIES } from '@/data/enemies';
+import type { MapData } from '@/data/maps';
 import ExplorationHUD from './ExplorationHUD';
 import VirtualJoystick from './VirtualJoystick';
 import DialogueBox from '@/components/ui/DialogueBox';
 import type { Dialogue } from '@/data/dialogues';
 
 interface ExplorationViewProps {
+  mapData: MapData;
   onBattleStart: (enemyId: string, enemyProfileId: string) => void;
   onShopOpen: () => void;
   onDeckOpen: () => void;
   onCraftingOpen: () => void;
+  onTerminalAction?: (dialogueId: string) => void; // custom terminal actions (e.g. zone_portal)
   isActive: boolean;              // true when this screen is visible
   lastBattleResult?: 'win' | 'lose' | null;
 }
 
 export default function ExplorationView({
+  mapData,
   onBattleStart,
   onShopOpen,
   onDeckOpen,
   onCraftingOpen,
+  onTerminalAction,
   isActive,
   lastBattleResult,
 }: ExplorationViewProps) {
@@ -88,11 +93,21 @@ export default function ExplorationView({
       onCraftingOpen();
       return;
     }
+    if (dialogueId === 'deck_terminal') {
+      onDeckOpen();
+      return;
+    }
+    // Custom terminal actions (zone_portal, etc.)
+    if (dialogueId === 'zone_portal' && onTerminalAction) {
+      onTerminalAction(dialogueId);
+      return;
+    }
+    // Default: show dialogue
     const d = DIALOGUES[dialogueId];
     if (d) setActiveDialogue(d);
-  }, [onCraftingOpen]);
+  }, [onCraftingOpen, onDeckOpen, onTerminalAction]);
 
-  const { engineRef, entitiesRef, resetContactCooldown, teleportToSpawn } = useExploration(canvasRef, defeatedEnemies, {
+  const { engineRef, entitiesRef, resetContactCooldown, teleportToSpawn } = useExploration(canvasRef, mapData, defeatedEnemies, {
     onEnemyContact:    handleEnemyContact,
     onNPCContact:      handleNPCContact,
     onDealerContact:   handleDealerContact,

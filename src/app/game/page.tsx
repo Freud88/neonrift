@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/stores/gameStore';
 import { useDeckStore } from '@/stores/deckStore';
+import { CITY_HUB_MAP } from '@/data/cityHubMap';
 import ExplorationView from '@/components/exploration/ExplorationView';
 import BattleArena from '@/components/battle/BattleArena';
 import DeckBuilder from '@/components/deckbuilder/DeckBuilder';
 import Shop from '@/components/shop/Shop';
 import CraftingPanel from '@/components/crafting/CraftingPanel';
+import ZoneSelectScreen from '@/components/zone/ZoneSelectScreen';
 import TutorialOverlay from '@/components/ui/TutorialOverlay';
 import DistrictVictory from '@/components/ui/DistrictVictory';
 import SettingsModal from '@/components/ui/SettingsModal';
@@ -56,20 +58,19 @@ function GlitchTransition({ show }: { show: boolean }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type Screen = 'exploration' | 'battle' | 'shop' | 'deckbuilder' | 'crafting';
+type Screen = 'city_hub' | 'zone_select' | 'battle' | 'shop' | 'deckbuilder' | 'crafting';
 
 export default function GamePage() {
   const router = useRouter();
-  const { gameState, setScene, saveGame, markTutorialSeen, defeatBoss } = useGameStore();
+  const { gameState, setScene, saveGame, markTutorialSeen, enterZone } = useGameStore();
   const { setCollection, setDeck } = useDeckStore();
 
-  const [screen, setScreen]                         = useState<Screen>('exploration');
+  const [screen, setScreen]                         = useState<Screen>('city_hub');
   const [glitchShow, setGlitchShow]                 = useState(false);
   const [pendingBattle, setPendingBattle]           = useState<{ enemyId: string; profileId: string } | null>(null);
   const [showTutorial, setShowTutorial]             = useState(false);
   const [showDistrictVictory, setShowDistrictVictory] = useState(false);
   const [showSettings, setShowSettings]             = useState(false);
-  const [pendingBattleResult, setPendingBattleResult] = useState<{ profileId: string } | null>(null);
   const [lastBattleResult, setLastBattleResult]     = useState<'win' | 'lose' | null>(null);
 
   useEffect(() => {
@@ -86,7 +87,6 @@ export default function GamePage() {
   // ── Scene transitions ─────────────────────────────────────────────────────
 
   const handleBattleStart = useCallback((enemyId: string, profileId: string) => {
-    // Guard: ignore if already transitioning to battle
     if (screen === 'battle') return;
     setPendingBattle({ enemyId, profileId });
     setGlitchShow(true);
@@ -95,7 +95,6 @@ export default function GamePage() {
       setScreen('battle');
       setScene('battle');
 
-      // Read fresh state from store (avoids stale closure)
       const freshState = useGameStore.getState().gameState;
       if (freshState && !freshState.progress.tutorialSeen) {
         setShowTutorial(true);
@@ -107,36 +106,49 @@ export default function GamePage() {
     const profileId = pendingBattle?.profileId ?? '';
     setLastBattleResult(result);
 
-    // Check if boss was defeated → district victory
     if (result === 'win' && profileId === 'madame_flux') {
-      setPendingBattleResult({ profileId });
       setTimeout(() => {
-        setScreen('exploration');
-        setScene('exploration');
+        setScreen('city_hub');
+        setScene('city_hub');
         setPendingBattle(null);
         saveGame();
         setShowDistrictVictory(true);
       }, 300);
     } else {
       setTimeout(() => {
-        setScreen('exploration');
-        setScene('exploration');
+        setScreen('city_hub');
+        setScene('city_hub');
         setPendingBattle(null);
         saveGame();
       }, 300);
     }
   }, [setScene, saveGame, pendingBattle]);
 
-  const handleBackToMap = useCallback(() => {
-    setScreen('exploration');
-    setScene('exploration');
+  const handleBackToHub = useCallback(() => {
+    setScreen('city_hub');
+    setScene('city_hub');
     setPendingBattle(null);
   }, [setScene]);
+
+  const handleTerminalAction = useCallback((dialogueId: string) => {
+    if (dialogueId === 'zone_portal') {
+      setScreen('zone_select');
+      return;
+    }
+    // Other terminal dialogues are handled inside ExplorationView
+  }, []);
+
+  const handleEnterZone = useCallback((level: number) => {
+    enterZone(level);
+    // Zone exploration will be implemented in FASE 3
+    // For now, show a message and go back
+    setScreen('city_hub');
+    setScene('city_hub');
+  }, [enterZone, setScene]);
 
   const handleTutorialDone = useCallback(() => {
     setShowTutorial(false);
     markTutorialSeen();
-    // Also update localStorage directly as a safety net
     try {
       const raw = localStorage.getItem('neonrift_save');
       if (raw) {
@@ -149,7 +161,6 @@ export default function GamePage() {
 
   const handleDistrictVictoryContinue = useCallback(() => {
     setShowDistrictVictory(false);
-    setPendingBattleResult(null);
   }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -165,22 +176,35 @@ export default function GamePage() {
   return (
     <div className="relative w-screen h-screen overflow-hidden" style={{ background: '#0a0a0f' }}>
 
-      {/* Exploration — always mounted, hidden during battle */}
+      {/* City Hub — always mounted, hidden during overlays */}
       <div
         className="absolute inset-0"
-        style={{ visibility: screen === 'exploration' ? 'visible' : 'hidden' }}
+        style={{ visibility: screen === 'city_hub' ? 'visible' : 'hidden' }}
       >
         <ExplorationView
+          mapData={CITY_HUB_MAP}
           onBattleStart={handleBattleStart}
           onShopOpen={() => { setScreen('shop'); setScene('shop'); }}
           onDeckOpen={() => { setScreen('deckbuilder'); setScene('deckbuilder'); }}
           onCraftingOpen={() => setScreen('crafting')}
-          isActive={screen === 'exploration'}
+          onTerminalAction={handleTerminalAction}
+          isActive={screen === 'city_hub'}
           lastBattleResult={lastBattleResult}
         />
       </div>
 
-      {/* Battle — full BattleArena */}
+      {/* Zone Select */}
+      {screen === 'zone_select' && (
+        <div className="absolute inset-0" style={{ zIndex: 30 }}>
+          <ZoneSelectScreen
+            maxLevel={gameState.progress.maxZoneLevel}
+            onEnterZone={handleEnterZone}
+            onBack={handleBackToHub}
+          />
+        </div>
+      )}
+
+      {/* Battle */}
       {screen === 'battle' && pendingBattle && (
         <div className="absolute inset-0" style={{ zIndex: 20 }}>
           <BattleArena
@@ -194,28 +218,28 @@ export default function GamePage() {
       {/* Shop */}
       {screen === 'shop' && (
         <div className="absolute inset-0" style={{ zIndex: 30 }}>
-          <Shop onClose={handleBackToMap} />
+          <Shop onClose={handleBackToHub} />
         </div>
       )}
 
       {/* Deck Builder */}
       {screen === 'deckbuilder' && (
         <div className="absolute inset-0" style={{ zIndex: 30 }}>
-          <DeckBuilder onClose={handleBackToMap} />
+          <DeckBuilder onClose={handleBackToHub} />
         </div>
       )}
 
       {/* Crafting Panel */}
       {screen === 'crafting' && (
         <div className="absolute inset-0" style={{ zIndex: 30 }}>
-          <CraftingPanel onClose={handleBackToMap} />
+          <CraftingPanel onClose={handleBackToHub} />
         </div>
       )}
 
       {/* Glitch transition */}
       <GlitchTransition show={glitchShow} />
 
-      {/* Tutorial overlay (shown on first battle) */}
+      {/* Tutorial overlay */}
       {showTutorial && (
         <TutorialOverlay onDone={handleTutorialDone} />
       )}
@@ -228,8 +252,8 @@ export default function GamePage() {
         />
       )}
 
-      {/* In-game settings button (top-right, exploration only) */}
-      {screen === 'exploration' && (
+      {/* Settings button (city hub only) */}
+      {screen === 'city_hub' && (
         <button
           onClick={() => setShowSettings(true)}
           style={{
