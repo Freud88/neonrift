@@ -173,6 +173,9 @@ export default function DeckBuilder({ onClose }: DeckBuilderProps) {
           <NeonButton variant="cyan" size="sm" onClick={saveDeck} disabled={!deckValid}>
             {saved ? '✓ SAVED' : 'SAVE DECK'}
           </NeonButton>
+          <NeonButton variant="ghost" size="sm" onClick={() => { setDeck([]); setSaved(false); }} disabled={deck.length === 0}>
+            CLEAR DECK
+          </NeonButton>
           <NeonButton variant="ghost" size="sm" onClick={onClose}>CLOSE</NeonButton>
         </div>
       </div>

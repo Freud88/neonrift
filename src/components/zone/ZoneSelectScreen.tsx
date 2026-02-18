@@ -25,6 +25,8 @@ interface ZoneSelectScreenProps {
   onBack: () => void;
 }
 
+const DEBUG_MAX_LEVEL = 50; // [DEBUG] show all levels up to this; remove cap before release
+
 export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: ZoneSelectScreenProps) {
   const [selected, setSelected] = useState<number>(maxLevel);
 
@@ -63,11 +65,12 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
         overflowY: 'auto',
         padding: '4px 0',
       }}>
-        {Array.from({ length: maxLevel }, (_, i) => {
+        {Array.from({ length: DEBUG_MAX_LEVEL }, (_, i) => {
           const level = i + 1;
           const b = BIOME_ORDER[(level - 1) % BIOME_ORDER.length];
           const info = BIOME_DISPLAY[b];
           const isSelected = selected === level;
+          const isLocked = level > maxLevel;
           return (
             <motion.button
               key={level}
@@ -76,8 +79,8 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
               onClick={() => setSelected(level)}
               style={{
                 background: isSelected ? `rgba(0,240,255,0.12)` : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${isSelected ? info.color : '#222244'}`,
-                color: isSelected ? info.color : '#6666aa',
+                border: `1px solid ${isSelected ? info.color : isLocked ? '#1a1a33' : '#222244'}`,
+                color: isSelected ? info.color : isLocked ? '#333355' : '#6666aa',
                 padding: '10px 6px',
                 cursor: 'pointer',
                 fontSize: 12,
@@ -86,10 +89,12 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
                 alignItems: 'center',
                 gap: 2,
                 borderRadius: 3,
+                opacity: isLocked ? 0.5 : 1,
               }}
             >
               <span style={{ fontSize: 16 }}>{info.icon}</span>
               <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 13 }}>L{level}</span>
+              {isLocked && <span style={{ fontSize: 7, color: '#ff4444', letterSpacing: '0.05em' }}>DBG</span>}
             </motion.button>
           );
         })}
@@ -127,6 +132,17 @@ export default function ZoneSelectScreen({ maxLevel, onEnterZone, onBack }: Zone
               letterSpacing: '0.15em',
             }}>
               HIGHEST
+            </span>
+          )}
+          {selected > maxLevel && (
+            <span style={{
+              fontSize: 9,
+              color: '#ff4444',
+              border: '1px solid #ff4444',
+              padding: '2px 8px',
+              letterSpacing: '0.15em',
+            }}>
+              [DEBUG]
             </span>
           )}
         </div>
